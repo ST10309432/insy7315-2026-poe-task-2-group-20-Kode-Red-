@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Minus, Plus, Clock } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
-import ItemIcon from '../../components/ItemIcon';
+import { ItemHero } from '../../components/ItemIcon';
 import { Loading, ErrorState } from '../../components/States';
 import { useApi } from '../../hooks/useApi';
 import { RatingChip } from '../../components/Stars';
@@ -30,8 +30,8 @@ export default function ItemDetail() {
     <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', alignItems: 'start' }}>
       <div>
         <PageHeader title="" back />
-        <div className={`card tone-${item.category}`} style={{ display: 'grid', placeItems: 'center', minHeight: 220 }}>
-          <ItemIcon category={item.category} size={120} />
+        <div className={`card tone-${item.category}`} style={{ display: 'grid', placeItems: 'center', minHeight: 220, padding: item.imageUrl ? 0 : 16, overflow: 'hidden', aspectRatio: item.imageUrl ? '4 / 3' : undefined }}>
+          <ItemHero item={item} iconSize={120} />
         </div>
       </div>
       <div className="card stack">
@@ -64,7 +64,7 @@ export default function ItemDetail() {
         </div>
         <button className="btn btn-primary btn-block" disabled={!item.available}
           onClick={() => { add(item, qty, extras); toast.success(`${qty} × ${item.name} added to cart`); navigate('/app/menu'); }}>
-          {item.available ? `Add to cart · ${rand(unit * qty)}` : 'Sold out today'}
+          {item.available ? `Add to cart · ${rand(unit * qty)}` : item.soldOutToday ? 'Sold out today' : 'Unavailable'}
         </button>
       </div>
     </div>

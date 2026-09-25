@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { MapPin, Search, GraduationCap, Clock, Plus } from 'lucide-react';
-import ItemIcon from '../../components/ItemIcon';
+import ItemIcon, { ItemHero } from '../../components/ItemIcon';
 import { Skeletons, ErrorState } from '../../components/States';
 import { useApi } from '../../hooks/useApi';
 import { useAuth } from '../../context/AuthContext';
@@ -84,7 +84,7 @@ function FeatureCard({ item }) {
   return (
     <div className="card feature-card">
       <Link to={`/app/item/${item.id}`} className={`top tone-${item.category}`} aria-label={`${item.name}, view details`}>
-        <ItemIcon category={item.category} size={56} />
+        <ItemHero item={item} />
         <span className="time-pill"><Clock size={12} aria-hidden="true" /> {item.prepMinutes} min</span>
       </Link>
       <div className="bottom row-between">

@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Star, Clock, Wallet, GraduationCap, Zap, MapPin, Phone, MessageCircle, ArrowRight, Sandwich, ShieldCheck } from 'lucide-react';
 import Brand from '../../components/Brand';
-import ItemIcon from '../../components/ItemIcon';
+import { ItemHero } from '../../components/ItemIcon';
 import TruckMap from '../../components/TruckMap';
 import { Stars } from '../../components/Stars';
 import { useApi } from '../../hooks/useApi';
@@ -71,7 +71,7 @@ export default function Landing() {
             <div className="grid grid-3">
               {highlights.map(item => (
                 <Link key={item.id} to={`/app/item/${item.id}`} className="card card-link feature-card">
-                  <div className={`top tone-${item.category}`}><ItemIcon category={item.category} size={64} /></div>
+                  <div className={`top tone-${item.category}`}><ItemHero item={item} iconSize={64} /></div>
                   <div className="bottom">
                     <h3 style={{ marginBottom: 2 }}>{item.name}</h3>
                     <p className="small muted" style={{ marginBottom: 6 }}>{item.description}</p>

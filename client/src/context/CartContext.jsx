@@ -18,7 +18,7 @@ export function CartProvider({ children }) {
       setLines(ls => {
         const existing = ls.find(l => l.key === key);
         if (existing) return ls.map(l => l.key === key ? { ...l, quantity: Math.min(20, l.quantity + quantity) } : l);
-        return [...ls, { key, itemId: item.id, name: item.name, category: item.category, unitPrice, quantity, extras }];
+        return [...ls, { key, itemId: item.id, name: item.name, category: item.category, imageUrl: item.imageUrl, unitPrice, quantity, extras }];
       });
     };
     const setQuantity = (key, q) => setLines(ls => q <= 0 ? ls.filter(l => l.key !== key) : ls.map(l => l.key === key ? { ...l, quantity: Math.min(20, q) } : l));
