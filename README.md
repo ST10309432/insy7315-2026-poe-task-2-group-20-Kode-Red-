@@ -146,6 +146,8 @@ React client ──HTTPS/JSON──▶ routes/ (HTTP + validation) ──▶ ser
 
 ## API reference
 
+Interactive docs (Swagger UI): **`/api/docs`** · OpenAPI spec: **`/api/openapi.json`**. Log in via `POST /api/auth/login`, click **Authorize** and paste the token to try protected endpoints.
+
 All responses are `{ "data": ... }` or `{ "error": { "message", "details" } }`.
 
 | Method | Endpoint | Who | Purpose |
@@ -158,7 +160,9 @@ All responses are `{ "data": ... }` or `{ "error": { "message", "details" } }`.
 | GET | `/api/menu/:id` | public | One item |
 | POST | `/api/menu` | admin | Add item · 201 |
 | PUT | `/api/menu/:id` | admin | Edit price, sale price, extras |
-| PATCH | `/api/menu/:id/availability` | admin, vendor | Mark sold out / available |
+| PATCH | `/api/menu/:id/availability` | admin, vendor | Sold out for today (auto-resets at midnight) or until changed |
+| GET | `/api/menu/:id/image` | public | Item photo (cached, versioned URL) |
+| PUT / DELETE | `/api/menu/:id/image` | admin | Upload (raw JPEG/PNG/WebP, max 1 MB) or remove the photo |
 | DELETE | `/api/menu/:id` | admin | Delete (409 if it has orders) · 204 |
 | GET / PATCH | `/api/truck` | public / staff | Open status, location, hours |
 | POST | `/api/orders` | logged in | Place order + pay, optionally with `usePoints` / `useFreeMeal` · 201 (422 if credit/wallet declined, 409 if sold out) |
