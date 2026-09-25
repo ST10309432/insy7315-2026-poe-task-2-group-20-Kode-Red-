@@ -6,19 +6,19 @@ const bcrypt = require('bcryptjs');
 const { pool } = require('../config/db');
 
 const MENU = [
-  // name, description, category, price, sale, prep, rating, extras
-  ['Bunny / Kota (Quarter)', 'Bread, chips, polony, atchar', 'KOTA', 35, null, 10, 4.6,
+  // name, description, category, price, sale, prep, extras
+  ['Bunny / Kota (Quarter)', 'Bread, chips, polony, atchar', 'KOTA', 35, null, 10,
     [['Extra polony', 5], ['Cheese slice', 6], ['Extra chips', 8], ['Chilli sauce', 0]]],
-  ['Half Kota Special', 'Chips, russian, cheese, egg', 'KOTA', 55, null, 12, 4.8,
+  ['Half Kota Special', 'Chips, russian, cheese, egg', 'KOTA', 55, null, 12,
     [['Extra polony', 5], ['Cheese slice', 6], ['Extra chips', 8], ['Chilli sauce', 0]]],
-  ['Full House Kota', 'The works: everything on', 'KOTA', 75, 60, 15, 4.9,
+  ['Full House Kota', 'The works: everything on', 'KOTA', 75, 60, 15,
     [['Extra russian', 10], ['Extra cheese', 6], ['Extra egg', 5], ['Chilli sauce', 0]]],
-  ['Slap Chips (Small)', 'Soft vinegar chips', 'CHIPS', 20, null, 6, 4.4, [['Chilli salt', 0], ['Cheese sauce', 7]]],
-  ['Slap Chips (Large)', 'Big box of soft vinegar chips', 'CHIPS', 30, null, 8, 4.7, [['Chilli salt', 0], ['Cheese sauce', 7]]],
-  ['Coke 440ml', 'Ice cold', 'DRINK', 15, null, 1, 4.8, []],
-  ['Fanta Orange 440ml', 'Ice cold', 'DRINK', 15, null, 1, 4.5, []],
-  ['Still Water 500ml', 'Bottled water', 'DRINK', 12, null, 1, 4.3, []],
-  ['Kota + Chips + Coke', 'Lunch combo deal', 'COMBO', 80, null, 14, 4.8, [['Upgrade to large chips', 8]]],
+  ['Slap Chips (Small)', 'Soft vinegar chips', 'CHIPS', 20, null, 6, [['Chilli salt', 0], ['Cheese sauce', 7]]],
+  ['Slap Chips (Large)', 'Big box of soft vinegar chips', 'CHIPS', 30, null, 8, [['Chilli salt', 0], ['Cheese sauce', 7]]],
+  ['Coke 440ml', 'Ice cold', 'DRINK', 15, null, 1, []],
+  ['Fanta Orange 440ml', 'Ice cold', 'DRINK', 15, null, 1, []],
+  ['Still Water 500ml', 'Bottled water', 'DRINK', 12, null, 1, []],
+  ['Kota + Chips + Coke', 'Lunch combo deal', 'COMBO', 80, null, 14, [['Upgrade to large chips', 8]]],
 ];
 
 const USERS = [
@@ -36,7 +36,11 @@ const DEMO_PASSWORD = 'Password123!';
 async function migrate(client) {
   const sql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
   await client.query(sql);
-  console.log('Schema created');
+  // Then apply numbered migrations in order (002_..., 003_...)
+  const dir = path.join(__dirname, 'migrations');
+  const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter(f => f.endsWith('.sql')).sort() : [];
+  for (const file of files) await client.query(fs.readFileSync(path.join(dir, file), 'utf8'));
+  console.log(`Schema created (${files.length} migration${files.length === 1 ? '' : 's'} applied)`);
 }
 
 async function seed(client) {
@@ -47,11 +51,11 @@ async function seed(client) {
   );
 
   const itemIds = {};
-  for (const [name, description, category, price, sale, prep, rating, extras] of MENU) {
+  for (const [name, description, category, price, sale, prep, extras] of MENU) {
     const { rows } = await client.query(
-      `INSERT INTO menu_items (name, description, category, price, sale_price, prep_minutes, rating)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING item_id`,
-      [name, description, category, price, sale, prep, rating]
+      `INSERT INTO menu_items (name, description, category, price, sale_price, prep_minutes)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING item_id`,
+      [name, description, category, price, sale, prep]
     );
     itemIds[name] = rows[0].item_id;
     for (const [extra, extraPrice] of extras) {
@@ -120,6 +124,11 @@ async function seed(client) {
         [rows[0].order_id, methods[n % 3], subtotal + 2]);
     }
   }
+  // Loyalty history for the demo students, derived from their seeded orders
+  await client.query(`UPDATE orders SET points_earned = FLOOR(total / 10)::int`);
+  await client.query(`UPDATE users u SET loyalty_points = s.points, free_meals = s.orders / 10
+    FROM (SELECT user_id, SUM(points_earned)::int AS points, COUNT(*)::int AS orders FROM orders GROUP BY user_id) s
+    WHERE s.user_id = u.user_id`);
   console.log(`Seeded menu, ${USERS.length} users (password: ${DEMO_PASSWORD}) and ${n} orders`);
 }
 
