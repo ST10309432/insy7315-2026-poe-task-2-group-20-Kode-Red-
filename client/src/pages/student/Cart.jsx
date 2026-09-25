@@ -4,9 +4,8 @@ import PageHeader from '../../components/PageHeader';
 import ItemIcon from '../../components/ItemIcon';
 import { EmptyState } from '../../components/States';
 import { useCart } from '../../context/CartContext';
+import { useSettings } from '../../hooks/useSettings';
 import { rand } from '../../utils/format';
-
-const SERVICE_FEE = 2;
 
 /** Next few half-hour slots, plus ASAP. */
 function slots() {
@@ -20,6 +19,7 @@ function slots() {
 export default function Cart() {
   const { lines, setQuantity, subtotal, count, collectionTime, setCollectionTime, clear } = useCart();
   const navigate = useNavigate();
+  const { serviceFee: SERVICE_FEE } = useSettings();
 
   if (count === 0) {
     return (

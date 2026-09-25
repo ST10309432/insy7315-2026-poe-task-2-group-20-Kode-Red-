@@ -16,7 +16,7 @@ export default function Home() {
   const [q, setQ] = useState('');
   const navigate = useNavigate();
 
-  const featured = (menu || []).filter(m => m.available).sort((a, b) => b.rating - a.rating).slice(0, 4);
+  const featured = (menu || []).filter(m => m.available).sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0)).slice(0, 4);
   const deals = (menu || []).filter(m => m.salePrice && m.available);
 
   return (
@@ -31,6 +31,7 @@ export default function Home() {
           <MapPin size={20} aria-hidden="true" />
           <div style={{ flex: 1 }}><strong>{truck.locationName}</strong><div className="xs muted">{truck.hours}</div></div>
           <span className={`badge ${truck.isOpen ? 'badge-green' : 'badge-red'}`}>{truck.isOpen ? 'Open' : 'Closed'}</span>
+          {truck.latitude && <a className="btn btn-sm" href={`https://www.openstreetmap.org/?mlat=${truck.latitude}&mlon=${truck.longitude}#map=18/${truck.latitude}/${truck.longitude}`} target="_blank" rel="noreferrer" aria-label="Open the truck's location on a map">Map</a>}
         </div>
       )}
 

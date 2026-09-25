@@ -1,10 +1,11 @@
 import { useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Plus, Star, Clock, SearchX } from 'lucide-react';
+import { Plus, Clock, SearchX } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import ItemIcon from '../../components/ItemIcon';
 import { Skeletons, ErrorState, EmptyState } from '../../components/States';
 import { useApi } from '../../hooks/useApi';
+import { RatingChip } from '../../components/Stars';
 import { useCart } from '../../context/CartContext';
 import { useToast } from '../../context/ToastContext';
 import { rand, CATEGORIES } from '../../utils/format';
@@ -58,7 +59,7 @@ export default function Menu() {
                 <div className="row" style={{ gap: 8 }}>
                   <span className="price">{rand(item.salePrice ?? item.price)}</span>
                   {item.salePrice && <span className="price-old">{rand(item.price)}</span>}
-                  <span className="rating"><Star size={11} aria-hidden="true" /> {item.rating}</span>
+                  <RatingChip rating={item.rating} count={item.ratingCount} />
                   <span className="xs muted row" style={{ gap: 3 }}><Clock size={12} aria-hidden="true" />{item.prepMinutes}m</span>
                 </div>
                 {!item.available && <span className="badge badge-grey" style={{ marginTop: 6 }}>Sold out today</span>}

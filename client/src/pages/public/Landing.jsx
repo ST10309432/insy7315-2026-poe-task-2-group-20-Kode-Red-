@@ -2,13 +2,17 @@ import { Link } from 'react-router-dom';
 import { Star, Clock, Wallet, GraduationCap, Zap, MapPin, Phone, MessageCircle, ArrowRight, Sandwich, ShieldCheck } from 'lucide-react';
 import Brand from '../../components/Brand';
 import ItemIcon from '../../components/ItemIcon';
+import TruckMap from '../../components/TruckMap';
+import { Stars } from '../../components/Stars';
 import { useApi } from '../../hooks/useApi';
 import { rand } from '../../utils/format';
 
 export default function Landing() {
   const { data: menu } = useApi('/menu');
   const { data: truck } = useApi('/truck');
-  const highlights = (menu || []).filter(m => m.available).sort((a, b) => b.rating - a.rating).slice(0, 4);
+  const { data: reviewData } = useApi('/reviews?limit=6');
+  const rating = reviewData?.summary;
+  const highlights = (menu || []).filter(m => m.available).sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0)).slice(0, 4);
 
   return (
     <>
@@ -45,7 +49,7 @@ export default function Landing() {
                 <Link to="/register" className="btn btn-yellow">Register with student number</Link>
               </div>
               <div className="hero-stats" aria-label="Quick facts">
-                <div><strong>4.8 <Star size={16} style={{ display: 'inline' }} aria-hidden="true" /></strong><span className="small muted">student rating</span></div>
+                {rating?.count > 0 && <div><strong>{rating.average} <Star size={16} style={{ display: 'inline' }} aria-hidden="true" /></strong><span className="small muted">from {rating.count} review{rating.count === 1 ? '' : 's'}</span></div>}
                 <div><strong>~12 min</strong><span className="small muted">average prep</span></div>
                 <div><strong>From R35</strong><span className="small muted">quarter kota</span></div>
               </div>
@@ -117,11 +121,27 @@ export default function Landing() {
           </div>
         </section>
 
+        {reviewData?.reviews?.length > 0 && (
+          <section className="section" aria-labelledby="reviews-title" style={{ paddingTop: 0 }}>
+            <div className="container">
+              <div className="section-title"><h2 id="reviews-title">What students say</h2>
+                <p className="muted">Real reviews from orders collected at the truck.</p></div>
+              <div className="grid grid-3">
+                {reviewData.reviews.map((r, i) => (
+                  <figure key={i} className="card review-card" style={{ margin: 0 }}>
+                    <Stars value={r.rating} />
+                    <blockquote>“{r.comment}”</blockquote>
+                    <figcaption className="small muted">{r.name} · {r.items}</figcaption>
+                  </figure>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
+
         <section id="find" className="section" style={{ paddingTop: 0 }}>
           <div className="container hero-grid">
-            <div className="map-box" role="img" aria-label={`Map showing the truck at ${truck?.locationName || 'Varsity College'}`}>
-              <span className="pin"><MapPin size={24} aria-hidden="true" /></span>
-            </div>
+            <TruckMap truck={truck} />
             <div className="stack">
               <h2 style={{ fontSize: '2rem' }}>Find the truck</h2>
               <p className="row"><MapPin size={20} aria-hidden="true" /> {truck?.locationName || 'Varsity College Campus'}</p>

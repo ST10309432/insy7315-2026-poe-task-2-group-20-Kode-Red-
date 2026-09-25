@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Minus, Plus, Star, Clock } from 'lucide-react';
+import { Minus, Plus, Clock } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import ItemIcon from '../../components/ItemIcon';
 import { Loading, ErrorState } from '../../components/States';
 import { useApi } from '../../hooks/useApi';
+import { RatingChip } from '../../components/Stars';
 import { useCart } from '../../context/CartContext';
 import { useToast } from '../../context/ToastContext';
 import { rand } from '../../utils/format';
@@ -38,7 +39,7 @@ export default function ItemDetail() {
           <h1>{item.name}</h1>
           <p className="muted mt-0">{item.description}</p>
           <div className="row small">
-            <span className="rating"><Star size={11} aria-hidden="true" /> {item.rating}</span>
+            <RatingChip rating={item.rating} count={item.ratingCount} />
             <span className="row muted" style={{ gap: 4 }}><Clock size={14} aria-hidden="true" /> {item.prepMinutes} min</span>
             <span className="muted">· R2 service fee</span>
           </div>
