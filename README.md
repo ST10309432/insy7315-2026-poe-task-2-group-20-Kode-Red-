@@ -70,7 +70,7 @@ All responses are `{ "data": ... }` or `{ "error": { "message", "details" } }`.
 | PATCH | `/api/menu/:id/availability` | admin, vendor | Mark sold out / available |
 | DELETE | `/api/menu/:id` | admin | Delete (409 if it has orders) · 204 |
 | GET / PATCH | `/api/truck` | public / staff | Open status, location, hours |
-| POST | `/api/orders` | logged in | Place order + pay · 201 (422 if credit/wallet declined, 409 if sold out) |
+| POST | `/api/orders` | logged in | Place order + pay, optionally with `usePoints` / `useFreeMeal` · 201 (422 if credit/wallet declined, 409 if sold out) |
 | GET | `/api/orders/mine` | logged in | Order history |
 | GET | `/api/orders/:orderNumber` | owner, staff | Track an order |
 | GET | `/api/orders?scope=active\|today` | staff | Live order queue |
@@ -78,11 +78,20 @@ All responses are `{ "data": ... }` or `{ "error": { "message", "details" } }`.
 | GET | `/api/wallet` | student | Wallet, credit, activity |
 | POST | `/api/wallet/top-up` | student | Load wallet (R10–R2000) |
 | POST | `/api/wallet/repay` | student | Repay credit from wallet or card |
+| POST | `/api/auth/me/student` | guest | Add a student number (becomes an unverified student) |
+| POST | `/api/orders/:orderNumber/review` | owner | Rate a collected order once (1–5 stars + comment) · 201 |
+| GET | `/api/reviews?limit=6` | public | Latest reviews + average rating |
+| GET | `/api/settings/public` | public | Service fee and loyalty rules |
+| GET | `/api/notifications` | logged in | Latest notifications + unread count |
+| PATCH | `/api/notifications/read-all`, `/:id/read` | logged in | Mark notifications as read |
 | GET | `/api/admin/dashboard` | staff | Today's figures |
 | GET | `/api/admin/reports?days=7` | admin | Sales by day, top sellers, payment mix |
 | GET | `/api/admin/students` | admin | Students with credit balances |
 | PATCH | `/api/admin/students/:id/verify` | admin | Verify a student |
 | PATCH | `/api/admin/students/:id/credit-limit` | admin | Set a student's limit |
+| PATCH | `/api/admin/students/:id/credit-status` | admin | Suspend or re-activate a student's credit |
+| GET | `/api/admin/students/export.csv` | admin | Export customer data (FR-28) |
+| GET | `/api/admin/reports/export.csv?days=30` | admin | Export sales report (FR-26) |
 | GET / PATCH | `/api/admin/settings` | admin | Default limit, service fee, loyalty rate |
 
 ## Hosting
