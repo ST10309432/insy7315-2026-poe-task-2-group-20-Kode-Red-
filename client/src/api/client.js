@@ -50,6 +50,21 @@ async function request(method, path, body, { timeout = 60000 } = {}) {
   return json.data;
 }
 
+/** Download a file (e.g. a CSV export) from a protected endpoint and save it. */
+export async function download(path, fallbackName) {
+  const token = tokenStore.get();
+  const res = await fetch(BASE + path, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, json.error?.message || 'Download failed');
+  }
+  const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '')?.[1] || fallbackName;
+  const url = URL.createObjectURL(await res.blob());
+  const a = Object.assign(document.createElement('a'), { href: url, download: name });
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export const api = {
   get: (p, o) => request('GET', p, undefined, o),
   post: (p, b, o) => request('POST', p, b ?? {}, o),

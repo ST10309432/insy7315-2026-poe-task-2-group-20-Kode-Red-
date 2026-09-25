@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, ClipboardList, UtensilsCrossed, GraduationCap, BarChart3, LogOut } from 'lucide-react';
+import { LayoutDashboard, ClipboardList, UtensilsCrossed, GraduationCap, BarChart3, LogOut, Settings } from 'lucide-react';
 import Brand from './Brand';
+import NotificationBell from './NotificationBell';
 import { useAuth } from '../context/AuthContext';
 
 export default function AdminLayout() {
@@ -24,7 +25,9 @@ export default function AdminLayout() {
             {nav.map(n => <NavLink key={n.to} to={n.to} end={n.end}>{n.label}</NavLink>)}
           </nav>
           <span className="spacer" />
-          <span className="badge badge-orange" title={user?.email}>{user?.role}</span>
+          <NotificationBell />
+          {isAdmin && <NavLink to="/admin/settings" className="icon-btn" aria-label="Settings" title="Settings"><Settings size={20} aria-hidden="true" /></NavLink>}
+          <span className="badge badge-orange hide-sm" title={user?.email}>{user?.role}</span>
           <button className="icon-btn" onClick={() => { logout(); navigate('/login'); }} aria-label="Log out" title="Log out">
             <LogOut size={20} aria-hidden="true" />
           </button>

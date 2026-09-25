@@ -19,6 +19,7 @@ import ManageMenu from './pages/admin/ManageMenu';
 import EditItem from './pages/admin/EditItem';
 import Credit from './pages/admin/Credit';
 import Reports from './pages/admin/Reports';
+import Settings from './pages/admin/Settings';
 
 const STAFF = ['ADMIN', 'VENDOR'];
 const auth = (el, roles) => <ProtectedRoute roles={roles}>{el}</ProtectedRoute>;
@@ -52,6 +53,7 @@ export default function App() {
         <Route path="menu/:id" element={auth(<EditItem />, ['ADMIN'])} />
         <Route path="credit" element={auth(<Credit />, ['ADMIN'])} />
         <Route path="reports" element={auth(<Reports />, ['ADMIN'])} />
+        <Route path="settings" element={auth(<Settings />, ['ADMIN'])} />
       </Route>
 
       <Route path="/home" element={<Navigate to="/" replace />} />
