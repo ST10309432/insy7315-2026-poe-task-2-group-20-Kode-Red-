@@ -1,14 +1,58 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Minus, Plus, Trash2, X } from 'lucide-react';
+import { Minus, Plus, Trash2, X, ImagePlus } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import Field, { Switch } from '../../components/Field';
 import { Loading, ErrorState, ButtonSpinner } from '../../components/States';
-import { api } from '../../api/client';
+import { api, API_ORIGIN } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { CATEGORIES } from '../../utils/format';
+import { resizeImage } from '../../utils/image';
+import ItemIcon from '../../components/ItemIcon';
 
 const EMPTY = { name: '', description: '', category: 'KOTA', price: 50, salePrice: null, available: true, prepMinutes: 10, extras: [] };
+
+function PhotoCard({ item, onChange }) {
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+  async function pick(e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setBusy(true);
+    try {
+      const blob = await resizeImage(file);
+      const updated = await api.upload(`/menu/${item.id}/image`, blob);
+      onChange(updated.imageUrl);
+      toast.success(`Photo saved (${Math.round(blob.size / 1024)} KB)`);
+    } catch (err) { toast.error(err.message); } finally { setBusy(false); }
+  }
+  async function remove() {
+    setBusy(true);
+    try { await api.del(`/menu/${item.id}/image`); onChange(null); toast.success('Photo removed'); }
+    catch (err) { toast.error(err.message); } finally { setBusy(false); }
+  }
+  return (
+    <div className="card stack">
+      <h2>Photo</h2>
+      <div className="row wrap" style={{ alignItems: 'flex-start' }}>
+        <div className={`tone-${item.category}`} style={{ width: 140, aspectRatio: '4 / 3', border: 'var(--line)', borderRadius: 12, overflow: 'hidden', display: 'grid', placeItems: 'center' }}>
+          {item.imageUrl ? <img src={API_ORIGIN + item.imageUrl} alt={`Current photo of ${item.name}`} className="item-hero" /> : <ItemIcon category={item.category} size={56} />}
+        </div>
+        <div className="stack" style={{ flex: '1 1 200px', marginTop: 0 }}>
+          <p className="xs muted" style={{ margin: 0 }}>A clear photo of the real food helps students choose. JPEG, PNG or WebP; it is resized automatically.</p>
+          <div className="row wrap">
+            <label className={`btn btn-sm btn-yellow ${busy ? 'disabled' : ''}`} style={{ cursor: busy ? 'wait' : 'pointer' }}>
+              {busy ? <ButtonSpinner /> : <ImagePlus size={16} aria-hidden="true" />} {item.imageUrl ? 'Replace photo' : 'Upload photo'}
+              <input type="file" accept="image/jpeg,image/png,image/webp,image/heic" onChange={pick} disabled={busy} className="sr-only" />
+            </label>
+            {item.imageUrl && <button type="button" className="btn btn-sm btn-danger" onClick={remove} disabled={busy}>Remove</button>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function EditItem() {
   const { id } = useParams();
@@ -36,10 +80,10 @@ export default function EditItem() {
     try {
       const body = { ...form, price: Number(form.price), salePrice: onSale ? Number(form.salePrice) : null,
         prepMinutes: Number(form.prepMinutes), extras: form.extras.filter(x => x.name.trim()).map(x => ({ name: x.name, price: Number(x.price) || 0 })) };
-      delete body.id; delete body.rating;
-      await (isNew ? api.post('/menu', body) : api.put(`/menu/${id}`, body));
-      toast.success(isNew ? 'Item added to the menu' : 'Changes saved');
-      navigate('/admin/menu');
+      ['id', 'rating', 'ratingCount', 'imageUrl', 'soldOutToday'].forEach(k => delete body[k]);
+      const saved = await (isNew ? api.post('/menu', body) : api.put(`/menu/${id}`, body));
+      if (isNew) { toast.success('Item added. Now add a photo.'); navigate(`/admin/menu/${saved.id}`, { replace: true }); }
+      else { toast.success('Changes saved'); navigate('/admin/menu'); }
     } catch (err) { setErrors(err.fieldErrors); toast.error(err.message); } finally { setBusy(false); }
   }
 
@@ -71,8 +115,12 @@ export default function EditItem() {
         <Field label="Prep time (minutes)" type="number" min="1" max="120" value={form.prepMinutes} onChange={e => set('prepMinutes', e.target.value)} error={errors.prepMinutes} />
       </div>
 
-      <div className="card-flat row-between"><div><strong>Available today</strong><div className="xs muted">Show it to students</div></div>
-        <Switch checked={form.available} label="Available today" onChange={v => set('available', v)} /></div>
+      {!isNew && <PhotoCard item={form} onChange={imageUrl => setForm(f => ({ ...f, imageUrl }))} />}
+      {isNew && <p className="notice small">You can add a photo after saving the item.</p>}
+
+      <div className="card-flat row-between"><div><strong>Available</strong>
+        <div className="xs muted">Off = hidden from ordering until you turn it back on. For "sold out today", use the switch on the menu list.</div></div>
+        <Switch checked={form.available} label="Available" onChange={v => set('available', v)} /></div>
       <div className="card-flat stack">
         <div className="row-between"><div><strong>On sale</strong><div className="xs muted">Apply a discounted price</div></div>
           <Switch checked={onSale} label="On sale" onChange={v => set('salePrice', v ? Math.max(1, Math.round(Number(form.price) * 0.8)) : null)} /></div>

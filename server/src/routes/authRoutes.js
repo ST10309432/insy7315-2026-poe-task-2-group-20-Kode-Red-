@@ -34,4 +34,9 @@ router.patch('/me', requireAuth, validate(s.updateProfile), async (req, res) => 
   res.json({ data: await userRepo.findById(req.user.id) });
 });
 
+// POST /api/auth/me/student  -> guest adds a student number (becomes a student, pending verification)
+router.post('/me/student', requireAuth, validate(s.becomeStudent), async (req, res) => {
+  res.json({ data: await authService.becomeStudent(req.user.id, req.body) });
+});
+
 module.exports = router;

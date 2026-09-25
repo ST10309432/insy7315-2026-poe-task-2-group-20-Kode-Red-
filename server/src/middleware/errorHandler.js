@@ -14,6 +14,7 @@ function errorHandler(err, req, res, next) {
   if (err.code === '23503') return res.status(409).json({ error: { message: 'That record is still in use or references something missing' } });
   if (err.code === '23514') return res.status(422).json({ error: { message: 'That change breaks a business rule', details: err.constraint } });
   if (err.type === 'entity.parse.failed') return res.status(400).json({ error: { message: 'Request body is not valid JSON' } });
+  if (err.type === 'entity.too.large') return res.status(413).json({ error: { message: 'That upload is too large' } });
 
   console.error(err);
   res.status(500).json({ error: { message: 'Something went wrong on our side. Please try again.' } });

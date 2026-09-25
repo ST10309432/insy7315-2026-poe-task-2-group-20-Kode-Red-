@@ -33,4 +33,18 @@ async function login({ email, password }) {
   return { token: signToken(user), user: await userRepo.findById(user.user_id) };
 }
 
-module.exports = { register, login };
+/** A guest adds their student number: becomes an (unverified) student with a wallet and credit account. */
+async function becomeStudent(userId, { studentNumber, campus }) {
+  const updated = await withTransaction(async client => {
+    const row = await userRepo.becomeStudent(userId, studentNumber, campus, client);
+    if (!row) throw AppError.conflict('Only guest accounts can add a student number');
+    const settings = await settingsRepo.getSettings(client);
+    await userRepo.createWallet(userId, client);
+    await userRepo.createCreditAccount(userId, settings.defaultCreditLimit, client);
+    return row;
+  });
+  // Role changed, so issue a new token
+  return { token: signToken(updated), user: await userRepo.findById(userId) };
+}
+
+module.exports = { register, login, becomeStudent };

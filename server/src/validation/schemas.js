@@ -40,7 +40,11 @@ const menuItem = z.object({
 });
 
 const menuQuery = z.object({ category: category.optional() });
-const availability = z.object({ available: z.boolean() });
+const availability = z.object({
+  available: z.boolean(),
+  // TODAY: sold out until midnight (default). UNTIL_CHANGED: stays off until turned back on.
+  scope: z.enum(['TODAY', 'UNTIL_CHANGED']).default('TODAY'),
+});
 const idParam = z.object({ id: z.coerce.number().int().positive() });
 
 const placeOrder = z.object({
@@ -51,7 +55,23 @@ const placeOrder = z.object({
   })).min(1, 'Your cart is empty').max(30),
   paymentMethod: z.enum(['WALLET', 'CREDIT', 'CARD']),
   collectionTime: z.union([z.literal('ASAP'), z.iso.datetime({ offset: true })]).default('ASAP'),
+  usePoints: z.coerce.number().int().min(0).max(100000).default(0),
+  useFreeMeal: z.boolean().default(false),
 });
+
+const review = z.object({
+  rating: z.coerce.number().int().min(1, 'Choose 1 to 5 stars').max(5),
+  comment: z.string().trim().max(300, 'Keep it under 300 characters').default(''),
+});
+
+const becomeStudent = z.object({
+  studentNumber: z.string().trim().toUpperCase().regex(/^ST\d{5,8}$/, 'Student number looks like ST10309432'),
+  campus: trimmed(2, 100).default('Varsity College Sandton'),
+});
+
+const creditStatus = z.object({ status: z.enum(['ACTIVE', 'SUSPENDED']) });
+const notificationParam = z.object({ id: z.coerce.number().int().positive() });
+const reviewsQuery = z.object({ limit: z.coerce.number().int().min(1).max(20).default(6) });
 
 const orderStatus = z.object({
   status: z.enum(['ACCEPTED', 'PREPARING', 'READY', 'COLLECTED', 'CANCELLED']),
@@ -68,6 +88,9 @@ const settings = z.object({
   defaultCreditLimit: z.coerce.number().min(0).max(5000).optional(),
   serviceFee: z.coerce.number().min(0).max(50).optional(),
   randsPerPoint: z.coerce.number().int().min(1).max(1000).optional(),
+  pointValue: z.coerce.number().min(0.01).max(100).optional(),
+  freeMealEvery: z.coerce.number().int().min(1).max(100).optional(),
+  freeMealCap: z.coerce.number().min(1).max(1000).optional(),
 });
 const truck = z.object({
   isOpen: z.boolean().optional(),
@@ -79,4 +102,5 @@ const truck = z.object({
 const reportQuery = z.object({ days: z.coerce.number().int().min(1).max(90).default(7) });
 
 module.exports = { register, login, updateProfile, menuItem, menuQuery, availability, idParam, placeOrder,
-  orderStatus, orderNumberParam, queueQuery, topUp, repay, verify, creditLimit, settings, truck, reportQuery };
+  orderStatus, orderNumberParam, queueQuery, topUp, repay, verify, creditLimit, settings, truck, reportQuery,
+  review, becomeStudent, creditStatus, notificationParam, reviewsQuery };

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { MapPin, Search, GraduationCap, Clock, Plus } from 'lucide-react';
-import ItemIcon from '../../components/ItemIcon';
+import ItemIcon, { ItemHero } from '../../components/ItemIcon';
 import { Skeletons, ErrorState } from '../../components/States';
 import { useApi } from '../../hooks/useApi';
 import { useAuth } from '../../context/AuthContext';
@@ -16,7 +16,7 @@ export default function Home() {
   const [q, setQ] = useState('');
   const navigate = useNavigate();
 
-  const featured = (menu || []).filter(m => m.available).sort((a, b) => b.rating - a.rating).slice(0, 4);
+  const featured = (menu || []).filter(m => m.available).sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0)).slice(0, 4);
   const deals = (menu || []).filter(m => m.salePrice && m.available);
 
   return (
@@ -31,6 +31,7 @@ export default function Home() {
           <MapPin size={20} aria-hidden="true" />
           <div style={{ flex: 1 }}><strong>{truck.locationName}</strong><div className="xs muted">{truck.hours}</div></div>
           <span className={`badge ${truck.isOpen ? 'badge-green' : 'badge-red'}`}>{truck.isOpen ? 'Open' : 'Closed'}</span>
+          {truck.latitude && <a className="btn btn-sm" href={`https://www.openstreetmap.org/?mlat=${truck.latitude}&mlon=${truck.longitude}#map=18/${truck.latitude}/${truck.longitude}`} target="_blank" rel="noreferrer" aria-label="Open the truck's location on a map">Map</a>}
         </div>
       )}
 
@@ -83,7 +84,7 @@ function FeatureCard({ item }) {
   return (
     <div className="card feature-card">
       <Link to={`/app/item/${item.id}`} className={`top tone-${item.category}`} aria-label={`${item.name}, view details`}>
-        <ItemIcon category={item.category} size={56} />
+        <ItemHero item={item} />
         <span className="time-pill"><Clock size={12} aria-hidden="true" /> {item.prepMinutes} min</span>
       </Link>
       <div className="bottom row-between">

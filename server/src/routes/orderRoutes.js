@@ -3,6 +3,7 @@ const validate = require('../middleware/validate');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const s = require('../validation/schemas');
 const orderService = require('../services/orderService');
+const reviewService = require('../services/reviewService');
 
 router.use(requireAuth);
 
@@ -30,6 +31,11 @@ router.get('/:orderNumber', validate(s.orderNumberParam, 'params'), async (req, 
 // PATCH /api/orders/:orderNumber/status  -> staff move through lifecycle, students cancel (FR-22)
 router.patch('/:orderNumber/status', validate(s.orderNumberParam, 'params'), validate(s.orderStatus), async (req, res) => {
   res.json({ data: await orderService.changeStatus(req.params.orderNumber, req.body.status, req.user) });
+});
+
+// POST /api/orders/:orderNumber/review  -> rate a collected order (FR-13) · 201
+router.post('/:orderNumber/review', validate(s.orderNumberParam, 'params'), validate(s.review), async (req, res) => {
+  res.status(201).json({ data: await reviewService.reviewOrder(req.params.orderNumber, req.user.id, req.body) });
 });
 
 module.exports = router;

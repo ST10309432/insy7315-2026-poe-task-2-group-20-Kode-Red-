@@ -3,11 +3,24 @@ const { query } = require('../config/db');
 const db = client => client || { query };
 
 const ITEM = `m.item_id AS id, m.name, m.description, m.category, m.price, m.sale_price AS "salePrice",
-  m.available, m.prep_minutes AS "prepMinutes", m.rating,
+  m.available, (m.sold_out_on IS NOT NULL) AS "soldOutToday", m.prep_minutes AS "prepMinutes",
+  (SELECT '/api/menu/' || mi.item_id || '/image?v=' || left(mi.etag, 12) FROM menu_images mi WHERE mi.item_id = m.item_id) AS "imageUrl",
+  (SELECT ROUND(AVG(r.rating), 1)::float FROM reviews r
+     WHERE r.order_id IN (SELECT oi.order_id FROM order_items oi WHERE oi.item_id = m.item_id)) AS rating,
+  (SELECT COUNT(*)::int FROM reviews r
+     WHERE r.order_id IN (SELECT oi.order_id FROM order_items oi WHERE oi.item_id = m.item_id)) AS "ratingCount",
   COALESCE(json_agg(json_build_object('id', e.extra_id, 'name', e.name, 'price', e.price) ORDER BY e.extra_id)
     FILTER (WHERE e.extra_id IS NOT NULL), '[]') AS extras`;
 
+// "Today" in South Africa, not UTC — so the reset happens at midnight SAST
+const TODAY_SAST = `(NOW() AT TIME ZONE 'Africa/Johannesburg')::date`;
+
 module.exports = {
+  /** Items sold out on an earlier day come back automatically. */
+  resetDailySoldOut: client =>
+    db(client).query(`UPDATE menu_items SET available = TRUE, sold_out_on = NULL
+                      WHERE available = FALSE AND sold_out_on < ${TODAY_SAST}`),
+
   list: ({ category, includeUnavailable = true } = {}) => {
     const where = [];
     const params = [];
@@ -35,7 +48,8 @@ module.exports = {
 
   update: (id, item, client) =>
     db(client).query(
-      `UPDATE menu_items SET name=$2, description=$3, category=$4, price=$5, sale_price=$6, available=$7, prep_minutes=$8
+      `UPDATE menu_items SET name=$2, description=$3, category=$4, price=$5, sale_price=$6, available=$7, prep_minutes=$8,
+         sold_out_on = CASE WHEN $7 THEN NULL ELSE sold_out_on END
        WHERE item_id = $1 RETURNING item_id AS id`,
       [id, item.name, item.description, item.category, item.price, item.salePrice ?? null, item.available, item.prepMinutes]
     ).then(r => r.rows[0]),
@@ -47,9 +61,22 @@ module.exports = {
     }
   },
 
-  setAvailability: (id, available) =>
-    query(`UPDATE menu_items SET available = $2 WHERE item_id = $1 RETURNING item_id AS id, available`, [id, available])
-      .then(r => r.rows[0]),
+  /** scope TODAY = sold out until midnight; UNTIL_CHANGED = off until someone turns it back on. */
+  setAvailability: (id, available, scope = 'TODAY') =>
+    query(`UPDATE menu_items SET available = $2,
+             sold_out_on = CASE WHEN $2 OR $3 <> 'TODAY' THEN NULL ELSE ${TODAY_SAST} END
+           WHERE item_id = $1 RETURNING item_id AS id, available, (sold_out_on IS NOT NULL) AS "soldOutToday"`,
+    [id, available, scope]).then(r => r.rows[0]),
+
+  saveImage: (id, mime, data, etag) =>
+    query(`INSERT INTO menu_images (item_id, mime, data, etag) VALUES ($1,$2,$3,$4)
+           ON CONFLICT (item_id) DO UPDATE SET mime = EXCLUDED.mime, data = EXCLUDED.data, etag = EXCLUDED.etag, updated_at = NOW()
+           RETURNING item_id`, [id, mime, data, etag]).then(r => r.rows[0]),
+
+  getImage: id =>
+    query(`SELECT mime, data, etag, updated_at FROM menu_images WHERE item_id = $1`, [id]).then(r => r.rows[0]),
+
+  deleteImage: id => query(`DELETE FROM menu_images WHERE item_id = $1 RETURNING item_id`, [id]).then(r => r.rows[0]),
 
   remove: id => query(`DELETE FROM menu_items WHERE item_id = $1 RETURNING item_id`, [id]).then(r => r.rows[0]),
 
