@@ -40,7 +40,11 @@ const menuItem = z.object({
 });
 
 const menuQuery = z.object({ category: category.optional() });
-const availability = z.object({ available: z.boolean() });
+const availability = z.object({
+  available: z.boolean(),
+  // TODAY: sold out until midnight (default). UNTIL_CHANGED: stays off until turned back on.
+  scope: z.enum(['TODAY', 'UNTIL_CHANGED']).default('TODAY'),
+});
 const idParam = z.object({ id: z.coerce.number().int().positive() });
 
 const placeOrder = z.object({

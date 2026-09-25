@@ -62,6 +62,7 @@ async function placeOrder(userId, { items, paymentMethod, collectionTime, usePoi
   }
 
   return withTransaction(async client => {
+    await menuRepo.resetDailySoldOut(client);
     const menuItems = await menuRepo.findManyByIds([...new Set(items.map(i => i.itemId))], client);
     const lines = priceLines(items, menuItems);
     const settings = await settingsRepo.getSettings(client);
