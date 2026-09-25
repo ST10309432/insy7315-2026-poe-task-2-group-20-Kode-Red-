@@ -18,6 +18,7 @@ const WalletPayment = {
   requiresVerifiedStudent: false,
   studentOnly: true,
   async charge({ user, amount, orderNumber, client }) {
+    if (amount <= 0) return; // fully covered by points / free meal
     const wallet = await walletRepo.getWalletForUpdate(user.id, client);
     if (!wallet) throw AppError.unprocessable('You do not have a wallet. Only students can pay by wallet.');
     if (wallet.balance < amount) {
@@ -28,6 +29,7 @@ const WalletPayment = {
     await walletRepo.addTransaction(user.id, 'WALLET_PURCHASE', -amount, `Order ${orderNumber}`, client);
   },
   async refund({ userId, amount, orderNumber, client }) {
+    if (amount <= 0) return;
     await walletRepo.adjustWallet(userId, amount, client);
     await walletRepo.addTransaction(userId, 'REFUND', amount, `Refund · ${orderNumber}`, client);
   },
@@ -38,13 +40,17 @@ const CreditPayment = {
   requiresVerifiedStudent: true,
   studentOnly: true,
   async charge({ user, amount, orderNumber, client }) {
+    if (amount <= 0) return;
+    await walletRepo.markOverdue(client);
     const account = await walletRepo.getCreditForUpdate(user.id, client);
     const check = canBorrow(account, amount);
     if (!check.ok) throw AppError.unprocessable(check.reason, { code: 'CREDIT_DECLINED', available: check.available });
+    await walletRepo.startCycleIfClear(user.id, client);
     await walletRepo.adjustCredit(user.id, amount, client);
     await walletRepo.addTransaction(user.id, 'CREDIT_PURCHASE', -amount, `Order ${orderNumber} · on credit`, client);
   },
   async refund({ userId, amount, orderNumber, client }) {
+    if (amount <= 0) return;
     await walletRepo.adjustCredit(userId, -amount, client);
     await walletRepo.addTransaction(userId, 'REFUND', amount, `Credit reversed · ${orderNumber}`, client);
   },

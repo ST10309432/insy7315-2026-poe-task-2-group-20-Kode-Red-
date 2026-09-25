@@ -7,6 +7,8 @@ const orderRepo = require('../repositories/orderRepository');
 const userRepo = require('../repositories/userRepository');
 const settingsRepo = require('../repositories/settingsRepository');
 const { getStrategy } = require('./paymentStrategies');
+const loyalty = require('./loyaltyService');
+const notify = require('./notificationService');
 
 // Task 1 §7.2 state diagram
 const TRANSITIONS = {
@@ -48,7 +50,7 @@ function resolveCollectionTime(requested, lines) {
   return when < earliest ? earliest : when;
 }
 
-async function placeOrder(userId, { items, paymentMethod, collectionTime }) {
+async function placeOrder(userId, { items, paymentMethod, collectionTime, usePoints = 0, useFreeMeal = false }) {
   const user = await userRepo.findById(userId);
   if (!user) throw AppError.unauthorized();
   const strategy = getStrategy(paymentMethod);
@@ -64,21 +66,40 @@ async function placeOrder(userId, { items, paymentMethod, collectionTime }) {
     const lines = priceLines(items, menuItems);
     const settings = await settingsRepo.getSettings(client);
     const subtotal = round2(lines.reduce((s, l) => s + l.lineTotal, 0));
-    const total = round2(subtotal + settings.serviceFee);
+
+    // Loyalty: lock the user's points so they can't be spent twice
+    const balance = await userRepo.getLoyaltyForUpdate(userId, client);
+    if (useFreeMeal && balance.free_meals < 1) throw AppError.conflict('You have no free meals to use yet');
+    if (usePoints > balance.loyalty_points) throw AppError.conflict(`You only have ${balance.loyalty_points} points`);
+    const d = loyalty.calculateDiscounts({ lines, subtotal, usePoints, useFreeMeal,
+      availablePoints: balance.loyalty_points, freeMeals: balance.free_meals, settings });
+    const total = round2(Math.max(0, subtotal + settings.serviceFee - d.discount));
 
     const order = await orderRepo.create({ userId, collectionTime: resolveCollectionTime(collectionTime, lines),
-      subtotal, serviceFee: settings.serviceFee, total }, client);
+      subtotal, serviceFee: settings.serviceFee, discount: d.discount, total,
+      pointsRedeemed: d.pointsUsed, freeMealUsed: d.freeMealDiscount > 0 }, client);
     for (const line of lines) await orderRepo.addItem(order.id, line, client);
 
     // Throws (and rolls back the whole order) if the wallet/credit check fails
     await strategy.charge({ user, amount: total, orderNumber: order.orderNumber, client });
     await orderRepo.addPayment(order.id, strategy.method, total, client);
 
-    const points = Math.floor(total / settings.randsPerPoint);
-    if (points > 0) await userRepo.addLoyaltyPoints(userId, points, client);
+    // Spend redeemed rewards, then earn new ones on what was actually paid
+    if (d.pointsUsed) await userRepo.addLoyaltyPoints(userId, -d.pointsUsed, client);
+    if (d.freeMealDiscount > 0) await userRepo.addFreeMeals(userId, -1, client);
+    const earned = loyalty.pointsEarned(total, settings);
+    if (earned > 0) await userRepo.addLoyaltyPoints(userId, earned, client);
+    const freeMealEarned = loyalty.earnsFreeMeal(await userRepo.countActiveOrders(userId, client), settings);
+    if (freeMealEarned) {
+      await userRepo.addFreeMeals(userId, 1, client);
+      await notify.freeMealEarned(userId, client);
+    }
+    await orderRepo.setRewards(order.id, earned, freeMealEarned, client);
 
     const full = await orderRepo.findByNumber(order.orderNumber, client);
-    return { ...full, pointsEarned: points };
+    await notify.orderStatus(userId, full.orderNumber, 'PLACED', client);
+    await notify.newOrderForStaff(full, client);
+    return full;
   });
 }
 
@@ -105,10 +126,17 @@ async function changeStatus(orderNumber, nextStatus, requester) {
       throw AppError.conflict(`Cannot move an order from ${order.status} to ${nextStatus}`,
         { allowed: TRANSITIONS[order.status] });
     }
-    if (nextStatus === 'CANCELLED' && order.method) {
-      await getStrategy(order.method).refund({ userId: order.user_id, amount: order.total, orderNumber, client });
+    if (nextStatus === 'CANCELLED') {
+      if (order.method) await getStrategy(order.method).refund({ userId: order.user_id, amount: order.total, orderNumber, client });
+      // Give back redeemed rewards and take back what this order earned
+      const pointsDelta = order.points_redeemed - order.points_earned;
+      if (pointsDelta) await userRepo.addLoyaltyPoints(order.user_id, pointsDelta, client);
+      const mealsDelta = (order.free_meal_used ? 1 : 0) - (order.free_meal_earned ? 1 : 0);
+      if (mealsDelta) await userRepo.addFreeMeals(order.user_id, mealsDelta, client);
     }
     await orderRepo.setStatus(order.order_id, nextStatus, client);
+    // Tell the student (skip when they cancelled it themselves)
+    if (isStaff) await notify.orderStatus(order.user_id, orderNumber, nextStatus, client);
     return orderRepo.findByNumber(orderNumber, client);
   });
 }
