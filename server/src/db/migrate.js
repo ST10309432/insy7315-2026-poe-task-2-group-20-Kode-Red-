@@ -63,7 +63,9 @@ async function seed(client) {
         [rows[0].item_id, extra, extraPrice]);
     }
   }
-  await client.query(`UPDATE menu_items SET available = FALSE WHERE name = 'Still Water 500ml'`);
+  // Demo: water is sold out for today only (comes back automatically after midnight)
+  await client.query(`UPDATE menu_items SET available = FALSE, sold_out_on = (NOW() AT TIME ZONE 'Africa/Johannesburg')::date
+                      WHERE name = 'Still Water 500ml'`);
 
   const hash = await bcrypt.hash(DEMO_PASSWORD, 10);
   const userIds = {};
