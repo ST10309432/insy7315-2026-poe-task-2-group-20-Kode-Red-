@@ -10,7 +10,7 @@ const app = express();
 
 app.set('trust proxy', 1); // Render sits behind a proxy (needed for rate limiting by IP)
 app.use(helmet());
-app.use(cors({ origin: env.corsOrigins, credentials: false }));
+app.use(cors({ origin: env.corsOrigins, credentials: false, exposedHeaders: ['Content-Disposition'] }));
 app.use(express.json({ limit: '100kb' }));
 if (env.nodeEnv !== 'test') app.use(morgan(env.nodeEnv === 'production' ? 'combined' : 'dev'));
 
@@ -27,6 +27,8 @@ app.use('/api/orders', require('./routes/orderRoutes'));
 app.use('/api/wallet', require('./routes/walletRoutes'));
 app.use('/api/admin', require('./routes/adminRoutes'));
 app.use('/api/truck', require('./routes/truckRoutes'));
+app.use('/api/notifications', require('./routes/notificationRoutes'));
+app.use('/api', require('./routes/publicRoutes'));
 
 app.use(notFound);
 app.use(errorHandler);
