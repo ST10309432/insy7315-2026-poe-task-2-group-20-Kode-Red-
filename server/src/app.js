@@ -21,6 +21,15 @@ app.get('/api/health', async (req, res) => {
   res.status(database === 'up' ? 200 : 503).json({ data: { status: 'ok', database, time: new Date().toISOString() } });
 });
 
+// Interactive API documentation (Swagger UI) at /api/docs, raw spec at /api/openapi.json
+const swaggerUi = require('swagger-ui-express');
+const openapi = require('./docs/openapi');
+app.get('/api/openapi.json', (req, res) => res.json(openapi));
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openapi, {
+  customSiteTitle: 'Thabang Phala API docs',
+  swaggerOptions: { persistAuthorization: true, tryItOutEnabled: true },
+}));
+
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/menu', require('./routes/menuRoutes'));
 app.use('/api/orders', require('./routes/orderRoutes'));
