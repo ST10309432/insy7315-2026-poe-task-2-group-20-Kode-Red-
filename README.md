@@ -11,6 +11,97 @@ A mobile-first ordering and payment system for Thabang Phala's food truck at Var
 | Database | `server/src/db/` | PostgreSQL |
 | Hosting | `render.yaml`, `client/vercel.json` | Vercel · Render · Neon (all free plans) |
 
+## Entity Relationship Diagram
+
+The database uses a single `users` table with a `role` column (STUDENT, GUEST, VENDOR, ADMIN), so students, vendors and admins all share one identity table.
+
+```mermaid
+erDiagram
+    USERS ||--o| WALLETS : "has one"
+    USERS ||--o| CREDIT_ACCOUNTS : "has one"
+    USERS ||--o{ ORDERS : "places"
+    USERS ||--o{ WALLET_TRANSACTIONS : "audit trail"
+    ORDERS ||--|{ ORDER_ITEMS : "contains"
+    ORDERS ||--o| PAYMENTS : "settled by"
+    ORDER_ITEMS }o--|| MENU_ITEMS : "references"
+    MENU_ITEMS ||--o{ MENU_EXTRAS : "offers"
+
+    USERS {
+        int user_id PK
+        varchar full_name
+        varchar email UK
+        varchar password_hash
+        varchar role
+        varchar student_number UK
+        boolean verified
+        int loyalty_points
+    }
+    WALLETS {
+        int wallet_id PK
+        int user_id FK
+        numeric balance
+    }
+    CREDIT_ACCOUNTS {
+        int credit_id PK
+        int user_id FK
+        numeric credit_limit
+        numeric outstanding_balance
+        varchar status
+    }
+    MENU_ITEMS {
+        int item_id PK
+        varchar name UK
+        varchar category
+        numeric price
+        boolean available
+    }
+    MENU_EXTRAS {
+        int extra_id PK
+        int item_id FK
+        varchar name
+        numeric price
+    }
+    ORDERS {
+        int order_id PK
+        varchar order_number UK
+        int user_id FK
+        timestamptz collection_time
+        varchar status
+        numeric total
+    }
+    ORDER_ITEMS {
+        int order_item_id PK
+        int order_id FK
+        int item_id FK
+        int quantity
+        numeric line_total
+        jsonb extras
+    }
+    PAYMENTS {
+        int payment_id PK
+        int order_id FK
+        varchar method
+        numeric amount
+    }
+    WALLET_TRANSACTIONS {
+        int tx_id PK
+        int user_id FK
+        varchar type
+        numeric amount
+    }
+    TRUCK_STATUS {
+        int id PK
+        boolean is_open
+        varchar location_name
+    }
+    SETTINGS {
+        int id PK
+        numeric default_credit_limit
+        numeric service_fee
+    }
+```
+
+
 ## Run it locally
 
 Prerequisites: Node.js 20+, and PostgreSQL running locally (or a free Neon database).
@@ -92,12 +183,26 @@ See [docs/HOSTING.md](docs/HOSTING.md). Live links:
 - Website / app: _add after deploying_
 - API: _add after deploying_
 
+## Backup Plan (NFR-12)
+
+The database runs on Neon PostgreSQL.
+
+- **Automated backups:** Neon provides Point-in-Time Recovery (PITR) with a 7-day retention window on the free tier.
+- **Manual weekly backup:** A `pg_dump` runs every Sunday at 02:00 SAST via a GitHub Action and is uploaded to a private cloud folder, keeping four weeks rolling.
+- **Recovery procedure:**
+  1. Open Neon Console → Project → Restore.
+  2. Select a timestamp within the retention window.
+  3. Neon creates a new branch with the restored data.
+  4. Update `DATABASE_URL` in the hosting environment (Vercel/Render) to point at the restored branch.
+  5. Smoke test `/api/menu` to confirm.
+
+  
 ## Team
 
 | Member | Role | Owns |
 |---|---|---|
 | Tadiwanashe (Tadi) Mapillar | UI development, APIs & hosting | `client/`, `server/src/routes/`, hosting |
-| Boipelo Yende | Database | `server/src/db/`, `server/src/repositories/` |
+| Boipelo Ntokozo Yende | Database | `server/src/db/`, `server/src/repositories/` |
 | Liyabona Xinti | Business logic & data flow | `server/src/services/` |
 | Molemo Chikane | Security & automated testing | `server/src/middleware/`, `server/tests/` |
 | Muofhe Washu Mukheli | GitHub & DevOps | `.github/workflows/`, README |

@@ -90,7 +90,7 @@ CREATE TABLE order_items (
 CREATE TABLE payments (
   payment_id  SERIAL PRIMARY KEY,
   order_id    INTEGER NOT NULL UNIQUE REFERENCES orders(order_id) ON DELETE CASCADE,
-  method      VARCHAR(6) NOT NULL CHECK (method IN ('WALLET', 'CREDIT', 'CARD')),
+  method      VARCHAR(10) NOT NULL CHECK (method IN ('WALLET', 'CREDIT', 'CARD')),
   amount      NUMERIC(10,2) NOT NULL CHECK (amount >= 0),
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -101,7 +101,7 @@ CREATE TABLE wallet_transactions (
   user_id      INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
   type         VARCHAR(16) NOT NULL
                CHECK (type IN ('TOP_UP', 'WALLET_PURCHASE', 'CREDIT_PURCHASE', 'CREDIT_REPAYMENT', 'REFUND')),
-  amount       NUMERIC(10,2) NOT NULL,
+  amount       NUMERIC(10,2) NOT NULL CHECK (amount >= 0),
   description  VARCHAR(120) NOT NULL,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -122,8 +122,31 @@ CREATE TABLE settings (
   id                    INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
   default_credit_limit  NUMERIC(10,2) NOT NULL DEFAULT 200 CHECK (default_credit_limit >= 0),
   service_fee           NUMERIC(10,2) NOT NULL DEFAULT 2 CHECK (service_fee >= 0),
-  rands_per_point       INTEGER NOT NULL DEFAULT 10 CHECK (rands_per_point > 0)
+  rands_per_point       INTEGER NOT NULL DEFAULT 10 CHECK (rands_per_point > 0),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Auto-maintain updated_at on orders, truck_status and settings
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_orders_updated_at
+BEFORE UPDATE ON orders
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE TRIGGER trg_truck_status_updated_at
+BEFORE UPDATE ON truck_status
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE TRIGGER trg_settings_updated_at
+BEFORE UPDATE ON settings
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
 
 -- Indexes for common lookups
 CREATE INDEX idx_orders_user ON orders(user_id, created_at DESC);
@@ -132,3 +155,5 @@ CREATE INDEX idx_orders_created ON orders(created_at);
 CREATE INDEX idx_order_items_order ON order_items(order_id);
 CREATE INDEX idx_menu_category ON menu_items(category);
 CREATE INDEX idx_wallet_tx_user ON wallet_transactions(user_id, created_at DESC);
+CREATE INDEX idx_menu_price ON menu_items(price);
+CREATE INDEX idx_payments_created ON payments(created_at);
