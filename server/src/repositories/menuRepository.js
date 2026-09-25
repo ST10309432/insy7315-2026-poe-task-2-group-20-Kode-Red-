@@ -3,7 +3,11 @@ const { query } = require('../config/db');
 const db = client => client || { query };
 
 const ITEM = `m.item_id AS id, m.name, m.description, m.category, m.price, m.sale_price AS "salePrice",
-  m.available, m.prep_minutes AS "prepMinutes", m.rating,
+  m.available, m.prep_minutes AS "prepMinutes",
+  (SELECT ROUND(AVG(r.rating), 1)::float FROM reviews r
+     WHERE r.order_id IN (SELECT oi.order_id FROM order_items oi WHERE oi.item_id = m.item_id)) AS rating,
+  (SELECT COUNT(*)::int FROM reviews r
+     WHERE r.order_id IN (SELECT oi.order_id FROM order_items oi WHERE oi.item_id = m.item_id)) AS "ratingCount",
   COALESCE(json_agg(json_build_object('id', e.extra_id, 'name', e.name, 'price', e.price) ORDER BY e.extra_id)
     FILTER (WHERE e.extra_id IS NOT NULL), '[]') AS extras`;
 

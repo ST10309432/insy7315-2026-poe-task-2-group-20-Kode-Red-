@@ -24,6 +24,9 @@ module.exports = {
            WHERE o.status <> 'CANCELLED' AND o.created_at >= NOW() - ($1::int * INTERVAL '1 day')
            GROUP BY oi.item_name ORDER BY revenue DESC LIMIT $2`, [days, limit]).then(r => r.rows),
 
+  ratingSummary: () =>
+    query(`SELECT ROUND(AVG(rating), 1)::float AS average, COUNT(*)::int AS count FROM reviews`).then(r => r.rows[0]),
+
   paymentMix: (days = 7) =>
     query(`SELECT p.method, COUNT(*)::int AS count, SUM(p.amount) AS amount
            FROM payments p JOIN orders o ON o.order_id = p.order_id
