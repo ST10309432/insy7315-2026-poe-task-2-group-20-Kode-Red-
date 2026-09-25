@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Banknote, ClipboardList, Hourglass, GraduationCap, UtensilsCrossed, BarChart3, MapPin } from 'lucide-react';
+import { Banknote, ClipboardList, Hourglass, GraduationCap, UtensilsCrossed, BarChart3, MapPin, Settings, LocateFixed } from 'lucide-react';
 import { Skeletons, ErrorState, ButtonSpinner } from '../../components/States';
 import { Switch } from '../../components/Field';
 import Field from '../../components/Field';
+import TruckMap from '../../components/TruckMap';
 import { useApi } from '../../hooks/useApi';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -25,6 +26,7 @@ export default function Dashboard() {
     { to: '/admin/orders', title: 'Order queue', sub: 'Accept & prepare', icon: ClipboardList },
     { to: '/admin/credit', title: 'Student credit', sub: data?.pendingVerifications ? `${data.pendingVerifications} to verify` : 'Limits & verify', icon: GraduationCap, admin: true },
     { to: '/admin/reports', title: 'Reports', sub: 'Sales & credit', icon: BarChart3, admin: true },
+    { to: '/admin/settings', title: 'Settings', sub: 'Fees & loyalty', icon: Settings, admin: true },
   ].filter(a => !a.admin || isAdmin);
 
   return (
@@ -65,6 +67,15 @@ function TruckStatus() {
   const toast = useToast();
   if (!truck) return null;
 
+  function pinMyLocation() {
+    if (!navigator.geolocation) { toast.error('This device cannot share its location'); return; }
+    setBusy(true);
+    navigator.geolocation.getCurrentPosition(
+      pos => update({ latitude: Number(pos.coords.latitude.toFixed(6)), longitude: Number(pos.coords.longitude.toFixed(6)) }, 'Map pin moved to your current location'),
+      () => { setBusy(false); toast.error('Location permission was denied'); },
+      { enableHighAccuracy: true, timeout: 10000 });
+  }
+
   async function update(patch, message) {
     setBusy(true);
     try { setData(await api.patch('/truck', patch)); toast.success(message); }
@@ -86,6 +97,10 @@ function TruckStatus() {
         </div>
         <button className="btn" disabled={busy || location === null || location.trim().length < 2}>{busy && <ButtonSpinner />} Update</button>
       </form>
+      <TruckMap truck={truck} height={220} />
+      <button type="button" className="btn btn-dark" style={{ justifySelf: 'start' }} onClick={pinMyLocation} disabled={busy}>
+        <LocateFixed size={18} aria-hidden="true" /> Pin the truck at my current location
+      </button>
     </section>
   );
 }

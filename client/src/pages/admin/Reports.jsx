@@ -1,17 +1,31 @@
 import { useState } from 'react';
+import { Download } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import { Loading, ErrorState } from '../../components/States';
 import { useApi } from '../../hooks/useApi';
+import { download } from '../../api/client';
+import { useToast } from '../../context/ToastContext';
+import { Stars } from '../../components/Stars';
 import { rand, randShort, METHOD_LABEL } from '../../utils/format';
 
 export default function Reports() {
   const [days, setDays] = useState(7);
   const { data, error, loading, reload } = useApi(`/admin/reports?days=${days}`);
   const [showTable, setShowTable] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const { data: reviewData } = useApi('/reviews?limit=5');
+  const toast = useToast();
+
+  async function exportCsv() {
+    setExporting(true);
+    try { await download(`/admin/reports/export.csv?days=${days}`, 'sales.csv'); toast.success('Sales report downloaded'); }
+    catch (err) { toast.error(err.message); } finally { setExporting(false); }
+  }
 
   return (
     <div className="stack">
-      <PageHeader title="Reports" />
+      <PageHeader title="Reports" action={
+        <button className="btn btn-sm" onClick={exportCsv} disabled={exporting}><Download size={16} aria-hidden="true" /> Export CSV</button>} />
       <div className="chips" role="group" aria-label="Period">
         {[7, 14, 30].map(d => <button key={d} className="chip" aria-pressed={days === d} onClick={() => setDays(d)}>Last {d} days</button>)}
       </div>
@@ -43,6 +57,18 @@ export default function Reports() {
                   <strong>{rand(t.revenue)}</strong>
                 </div>
               ))}
+            </section>
+            <section className="card" aria-labelledby="ratings">
+              <h2 id="ratings">Customer ratings</h2>
+              {data.ratings.count === 0
+                ? <p className="muted small">No reviews yet. Students can rate an order after collecting it.</p>
+                : <>
+                    <p className="row" style={{ gap: 8 }}><span className="value" style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: '1.6rem' }}>{data.ratings.average}</span>
+                      <Stars value={data.ratings.average} size={18} /> <span className="small muted">({data.ratings.count} reviews)</span></p>
+                    {reviewData?.reviews?.map((r, i) => (
+                      <div key={i} className="tx small"><span><Stars value={r.rating} size={12} /> “{r.comment}”<div className="xs muted">{r.name}</div></span></div>
+                    ))}
+                  </>}
             </section>
             <section className="card" aria-labelledby="pay-mix">
               <h2 id="pay-mix">Payment methods</h2>
