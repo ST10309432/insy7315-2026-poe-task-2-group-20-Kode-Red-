@@ -144,6 +144,34 @@ React client ──HTTPS/JSON──▶ routes/ (HTTP + validation) ──▶ ser
 - **Repository pattern:** `repositories/` keeps SQL out of the business logic.
 - **Transactions:** orders, wallet and credit changes run in a single DB transaction with row locks, so a student can never be double-charged or go over their limit.
 
+- ## Branching strategy
+
+| Branch | Purpose | Deploys to |
+|---|---|---|
+| `main` | Production. Protected. Only merged from `develop` via reviewed PR. | Vercel + Render (auto) |
+| `develop` | Integration. Protected. Feature branches merge here first. | — |
+| `feature/<name>` | One feature or fix, branched from `develop`, PR back into `develop`. | — |
+
+Rules: no direct commits to `main` or `develop`; every PR needs one approving review and a passing CI run; commit messages follow `feat:`, `fix:`, `test:`, `docs:`, `ci:`, `chore:`.
+
+## CI/CD pipeline
+
+Three GitHub Actions workflows in `.github/workflows/`:
+
+**`ci.yml`** — runs on every push and PR to `main`/`develop`:
+1. Spins up a PostgreSQL 16 service container.
+2. Installs server deps, seeds the DB, runs Jest + Supertest.
+3. Installs client deps, runs oxlint, builds with Vite.
+
+**`cd.yml`** — runs on push to `main`:
+1. Triggers the Render deploy hook (API).
+2. Triggers the Vercel deploy hook (client).
+3. Smoke-tests `/api/health` and the client root URL; fails if either is down.
+
+**`backup.yml`** — Sundays 02:00 SAST: `pg_dump` → gzip → GitHub artifact (28-day retention).
+
+![CI](https://github.com/EMGPPT/insy7315-2026-poe-task-2-group-20/actions/workflows/ci.yml/badge.svg)
+![CD](https://github.com/EMGPPT/insy7315-2026-poe-task-2-group-20/actions/workflows/cd.yml/badge.svg)
 ## API reference
 
 Interactive docs (Swagger UI): **`/api/docs`** · OpenAPI spec: **`/api/openapi.json`**. Log in via `POST /api/auth/login`, click **Authorize** and paste the token to try protected endpoints.
@@ -191,10 +219,13 @@ All responses are `{ "data": ... }` or `{ "error": { "message", "details" } }`.
 
 ## Hosting
 
-See [docs/HOSTING.md](docs/HOSTING.md). Live links:
-
-- Website / app: _add after deploying_
-- API: _add after deploying_
+| Part | Platform | Live URL |
+|---|---|---|
+| Marketing website / student app | Vercel | https://thabang-phala.vercel.app |
+| Admin portal | Vercel | https://thabang-phala.vercel.app/admin |
+| REST API | Render | https://thabang-phala-api.onrender.com |
+| API docs (Swagger) | Render | https://thabang-phala-api.onrender.com/api/docs/ |
+| Database | Neon (managed PostgreSQL) | (private connection string) |
 
 ## Backup Plan (NFR-12)
 
