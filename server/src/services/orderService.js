@@ -1,118 +1,158 @@
-// Order placement and lifecycle. Owner: Liyabona (business logic).
-const { withTransaction } = require('../config/db');
-const AppError = require('../utils/AppError');
-const { round2 } = require('../utils/money');
-const menuRepo = require('../repositories/menuRepository');
-const orderRepo = require('../repositories/orderRepository');
-const userRepo = require('../repositories/userRepository');
-const settingsRepo = require('../repositories/settingsRepository');
-const { getStrategy } = require('./paymentStrategies');
 
-// Task 1 §7.2 state diagram
-const TRANSITIONS = {
-  PLACED: ['ACCEPTED', 'CANCELLED'],
-  ACCEPTED: ['PREPARING', 'READY', 'CANCELLED'],
-  PREPARING: ['READY'],
-  READY: ['COLLECTED'],
-  COLLECTED: [],
-  CANCELLED: [],
+
+import { calculateOrderTotal } from './pricingService.js';
+import { canBorrow } from './creditService.js';
+import { getPaymentStrategy } from './paymentStrategies.js';
+import { calculatePointsEarned, applyRedemption, getAvailablePoints } from './loyaltyService.js';
+
+export const ORDER_STATUS = {
+  PLACED: 'PLACED',
+  ACCEPTED: 'ACCEPTED',
+  PREPARING: 'PREPARING',
+  READY: 'READY',
+  COLLECTED: 'COLLECTED',
+  CANCELLED: 'CANCELLED',
 };
 
-const canTransition = (from, to) => (TRANSITIONS[from] || []).includes(to);
+const ALLOWED_TRANSITIONS = {
+  [ORDER_STATUS.PLACED]: [ORDER_STATUS.ACCEPTED, ORDER_STATUS.CANCELLED],
+  [ORDER_STATUS.ACCEPTED]: [ORDER_STATUS.PREPARING],
+  [ORDER_STATUS.PREPARING]: [ORDER_STATUS.READY],
+  [ORDER_STATUS.READY]: [ORDER_STATUS.COLLECTED],
+  [ORDER_STATUS.COLLECTED]: [],
+  [ORDER_STATUS.CANCELLED]: [],
+};
 
-/** Price every line on the server from the database — never trust prices from the browser. */
-function priceLines(requested, menuItems) {
-  const byId = new Map(menuItems.map(m => [m.id, m]));
-  return requested.map(line => {
-    const item = byId.get(line.itemId);
-    if (!item) throw AppError.badRequest(`Menu item ${line.itemId} does not exist`);
-    if (!item.available) throw AppError.conflict(`${item.name} is sold out today`, { itemId: item.id });
-    const extras = (line.extraIds || []).map(id => {
-      const extra = item.extras.find(e => e.id === id);
-      if (!extra) throw AppError.badRequest(`Extra ${id} is not available for ${item.name}`);
-      return { id: extra.id, name: extra.name, price: extra.price };
+export async function createOrder(input, repos) {
+  const { customerId, lineItems, collectionTime, paymentMethod, cardToken, redeemPoints = 0 } = input;
+
+  if (!collectionTime) {
+    const err = new Error('A collection time is required (FR-06).');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const [menuItems, extras, loyaltySettings] = await Promise.all([
+    repos.menuRepository.getItemsByIds(lineItems.map((l) => l.menuItemId)),
+    repos.menuRepository.getExtrasByIds(lineItems.flatMap((l) => l.extraIds || [])),
+    repos.settingsRepository.getLoyaltySettings(),
+  ]);
+  const menuLookup = new Map(menuItems.map((item) => [item.id, item]));
+  const extrasLookup = new Map(extras.map((extra) => [extra.id, extra]));
+
+  const pricing = calculateOrderTotal(lineItems, menuLookup, extrasLookup);
+  let amountDue = pricing.total;
+  let redemption = null;
+
+  if (redeemPoints > 0) {
+    const ledger = await repos.loyaltyRepository.getLedger(customerId);
+    const available = getAvailablePoints(ledger);
+    redemption = applyRedemption(redeemPoints, available, pricing.total, loyaltySettings);
+    amountDue = round2(Math.max(0, pricing.total - redemption.discount));
+  }
+
+  if (paymentMethod === 'CREDIT') {
+    const [student, creditAccount] = await Promise.all([
+      repos.studentRepository.getById(customerId),
+      repos.creditRepository.getAccount(customerId),
+    ]);
+    const decision = canBorrow(student, creditAccount, amountDue);
+    if (!decision.allowed) {
+      const err = new Error(decision.reason);
+      err.statusCode = 403;
+      throw err;
+    }
+  }
+
+  const strategy = getPaymentStrategy(paymentMethod);
+
+  return repos.withTransaction(async (dbClient) => {
+    const paymentReceipt = await strategy.pay({
+      studentId: customerId,
+      amount: amountDue,
+      cardToken,
+      repos,
+      dbClient,
     });
-    const unitPrice = round2((item.salePrice ?? item.price) + extras.reduce((s, e) => s + e.price, 0));
-    return { itemId: item.id, name: item.name, quantity: line.quantity, extras, unitPrice,
-      lineTotal: round2(unitPrice * line.quantity), prepMinutes: item.prepMinutes };
+
+    const order = await repos.orderRepository.create(
+      {
+        customerId,
+        collectionTime,
+        status: ORDER_STATUS.PLACED,
+        lineItems: pricing.lineItems,
+        subtotal: pricing.subtotal,
+        extrasTotal: pricing.extrasTotal,
+        serviceFee: pricing.serviceFee,
+        total: pricing.total,
+        amountPaid: amountDue,
+        paymentMethod,
+        pointsRedeemed: redemption ? redemption.pointsRedeemed : 0,
+        loyaltyDiscount: redemption ? redemption.discount : 0,
+      },
+      dbClient,
+    );
+
+    // LP-01: award points for this purchase.
+    const pointsEarned = calculatePointsEarned(loyaltySettings);
+    if (pointsEarned > 0) {
+      await repos.loyaltyRepository.addPoints(
+        customerId,
+        pointsEarned,
+        { orderId: order.id, earnedAt: new Date() },
+        dbClient,
+      );
+    }
+    if (redemption && redemption.pointsRedeemed > 0) {
+      await repos.loyaltyRepository.redeemPoints(customerId, redemption.pointsRedeemed, order.id, dbClient);
+    }
+
+    return {
+      order,
+      payment: paymentReceipt,
+      pointsEarned,
+      redemption: redemption
+        ? { pointsRedeemed: redemption.pointsRedeemed, discount: redemption.discount }
+        : { pointsRedeemed: 0, discount: 0 },
+    };
   });
 }
 
-function resolveCollectionTime(requested, lines) {
-  const prep = Math.max(...lines.map(l => l.prepMinutes));
-  const earliest = new Date(Date.now() + prep * 60 * 1000);
-  if (!requested || requested === 'ASAP') return earliest;
-  const when = new Date(requested);
-  if (when < new Date(Date.now() - 60 * 1000)) throw AppError.badRequest('Collection time is in the past');
-  if (when - Date.now() > 12 * 60 * 60 * 1000) throw AppError.badRequest('Collection time must be within 12 hours');
-  return when < earliest ? earliest : when;
-}
 
-async function placeOrder(userId, { items, paymentMethod, collectionTime }) {
-  const user = await userRepo.findById(userId);
-  if (!user) throw AppError.unauthorized();
-  const strategy = getStrategy(paymentMethod);
-  if (strategy.studentOnly && user.role !== 'STUDENT') {
-    throw AppError.forbidden('Wallet and Student Credit are only for registered students. Please pay by card.');
-  }
-  if (strategy.requiresVerifiedStudent && !user.verified) {
-    throw AppError.forbidden('Your student number is still being verified. Student Credit unlocks once Thabang approves you.');
-  }
+export async function transitionOrderStatus(orderId, newStatus, repos) {
+  return repos.withTransaction(async (dbClient) => {
+    const order = await repos.orderRepository.getById(orderId, dbClient);
+    if (!order) {
+      const err = new Error('Order not found.');
+      err.statusCode = 404;
+      throw err;
+    }
 
-  return withTransaction(async client => {
-    const menuItems = await menuRepo.findManyByIds([...new Set(items.map(i => i.itemId))], client);
-    const lines = priceLines(items, menuItems);
-    const settings = await settingsRepo.getSettings(client);
-    const subtotal = round2(lines.reduce((s, l) => s + l.lineTotal, 0));
-    const total = round2(subtotal + settings.serviceFee);
+    const allowedNext = ALLOWED_TRANSITIONS[order.status] || [];
+    if (!allowedNext.includes(newStatus)) {
+      const err = new Error(`Cannot move order from ${order.status} to ${newStatus}.`);
+      err.statusCode = 409;
+      throw err;
+    }
 
-    const order = await orderRepo.create({ userId, collectionTime: resolveCollectionTime(collectionTime, lines),
-      subtotal, serviceFee: settings.serviceFee, total }, client);
-    for (const line of lines) await orderRepo.addItem(order.id, line, client);
+    if (newStatus === ORDER_STATUS.CANCELLED) {
+      const strategy = getPaymentStrategy(order.paymentMethod);
+      await strategy.refund({
+        studentId: order.customerId,
+        amount: order.amountPaid,
+        gatewayReference: order.gatewayReference,
+        repos,
+        dbClient,
+      });
+      if (order.pointsEarned > 0) {
+        await repos.loyaltyRepository.reversePoints(order.customerId, order.pointsEarned, order.id, dbClient);
+      }
+    }
 
-    // Throws (and rolls back the whole order) if the wallet/credit check fails
-    await strategy.charge({ user, amount: total, orderNumber: order.orderNumber, client });
-    await orderRepo.addPayment(order.id, strategy.method, total, client);
-
-    const points = Math.floor(total / settings.randsPerPoint);
-    if (points > 0) await userRepo.addLoyaltyPoints(userId, points, client);
-
-    const full = await orderRepo.findByNumber(order.orderNumber, client);
-    return { ...full, pointsEarned: points };
+    return repos.orderRepository.updateStatus(orderId, newStatus, dbClient);
   });
 }
 
-async function getOrder(orderNumber, requester) {
-  const order = await orderRepo.findByNumber(orderNumber);
-  if (!order) throw AppError.notFound(`Order ${orderNumber} not found`);
-  const isStaff = ['ADMIN', 'VENDOR'].includes(requester.role);
-  if (!isStaff && order.userId !== requester.id) throw AppError.notFound(`Order ${orderNumber} not found`);
-  return order;
+function round2(value) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
 }
-
-/** Staff move an order through the lifecycle; students may only cancel their own PLACED orders. */
-async function changeStatus(orderNumber, nextStatus, requester) {
-  return withTransaction(async client => {
-    const order = await orderRepo.findByNumberForUpdate(orderNumber, client);
-    if (!order) throw AppError.notFound(`Order ${orderNumber} not found`);
-    const isStaff = ['ADMIN', 'VENDOR'].includes(requester.role);
-    if (!isStaff) {
-      if (order.user_id !== requester.id) throw AppError.notFound(`Order ${orderNumber} not found`);
-      if (nextStatus !== 'CANCELLED') throw AppError.forbidden();
-      if (order.status !== 'PLACED') throw AppError.conflict('This order has already been accepted and can no longer be cancelled');
-    }
-    if (!canTransition(order.status, nextStatus)) {
-      throw AppError.conflict(`Cannot move an order from ${order.status} to ${nextStatus}`,
-        { allowed: TRANSITIONS[order.status] });
-    }
-    if (nextStatus === 'CANCELLED' && order.method) {
-      await getStrategy(order.method).refund({ userId: order.user_id, amount: order.total, orderNumber, client });
-    }
-    await orderRepo.setStatus(order.order_id, nextStatus, client);
-    return orderRepo.findByNumber(orderNumber, client);
-  });
-}
-
-module.exports = { placeOrder, getOrder, changeStatus, priceLines, canTransition, TRANSITIONS,
-  listMine: userId => orderRepo.listForUser(userId),
-  listQueue: activeOnly => orderRepo.listQueue({ activeOnly }) };
