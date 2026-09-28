@@ -1,12 +1,11 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { Minus, Plus, ShoppingCart, Trash2 } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
-import ItemIcon from '../../components/ItemIcon';
+import { ItemThumb } from '../../components/ItemIcon';
 import { EmptyState } from '../../components/States';
 import { useCart } from '../../context/CartContext';
+import { useSettings } from '../../hooks/useSettings';
 import { rand } from '../../utils/format';
-
-const SERVICE_FEE = 2;
 
 /** Next few half-hour slots, plus ASAP. */
 function slots() {
@@ -20,6 +19,7 @@ function slots() {
 export default function Cart() {
   const { lines, setQuantity, subtotal, count, collectionTime, setCollectionTime, clear } = useCart();
   const navigate = useNavigate();
+  const { serviceFee: SERVICE_FEE } = useSettings();
 
   if (count === 0) {
     return (
@@ -39,7 +39,7 @@ export default function Cart() {
         <ul className="card" style={{ listStyle: 'none', margin: 0, padding: '4px 16px' }}>
           {lines.map(l => (
             <li key={l.key} className="line-item">
-              <ItemIcon category={l.category} size={42} />
+              <ItemThumb item={l} size={42} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <strong>{l.name}</strong>
                 <div className="xs muted">{rand(l.unitPrice)} each{l.extras.length > 0 && ` · ${l.extras.map(e => e.name).join(', ')}`}</div>

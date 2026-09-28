@@ -1,109 +1,74 @@
+// Strategy pattern (Task 1 §9.1): each payment method settles an order its own way,
+// so the checkout logic never needs to know the details. Owner: Liyabona (business logic).
+const AppError = require('../utils/AppError');
+const walletRepo = require('../repositories/walletRepository');
+const { round2 } = require('../utils/money');
 
-
-import { chargeCredit, refundCredit } from './creditService.js';
-
-
-export class PaymentStrategy {
-  // eslint-disable-next-line no-unused-vars
-  async pay(context) {
-    throw new Error('pay() not implemented');
-  }
-  // eslint-disable-next-line no-unused-vars
-  async refund(context) {
-    throw new Error('refund() not implemented');
-  }
+function canBorrow(account, amount) {
+  if (!account) return { ok: false, reason: 'You do not have a student credit account' };
+  if (account.status !== 'ACTIVE') return { ok: false, reason: `Your credit account is ${account.status.toLowerCase()}. Please settle it first.` };
+  const available = round2(account.credit_limit - account.outstanding_balance);
+  if (amount > available) return { ok: false, reason: `Only R${available.toFixed(2)} credit available`, available };
+  return { ok: true, available };
 }
 
-/** Throws if a guest tries to use a student-only payment method. */
-function assertIsStudent(student, methodLabel) {
-  if (!student) {
-    throw new PaymentError(
-      `${methodLabel} is only available to registered students, not guest customers.`,
-    );
-  }
-}
-
-export class WalletPayment extends PaymentStrategy {
-  async pay({ studentId, amount, repos, dbClient }) {
-    const student = await repos.studentRepository.getById(studentId);
-    assertIsStudent(student, 'Wallet payment');
-
-    const balance = await repos.walletRepository.getBalance(studentId);
-    if (balance < amount) {
-      throw new PaymentError(`Insufficient wallet balance (R${balance.toFixed(2)} available).`);
+const WalletPayment = {
+  method: 'WALLET',
+  requiresVerifiedStudent: false,
+  studentOnly: true,
+  async charge({ user, amount, orderNumber, client }) {
+    if (amount <= 0) return;
+    const wallet = await walletRepo.getWalletForUpdate(user.id, client);
+    if (!wallet) throw AppError.unprocessable('You do not have a wallet. Only students can pay by wallet.');
+    if (wallet.balance < amount) {
+      throw AppError.unprocessable(`Not enough wallet balance (R${wallet.balance.toFixed(2)}). Top up or choose another method.`,
+        { code: 'INSUFFICIENT_FUNDS', balance: wallet.balance });
     }
-    await repos.walletRepository.deduct(studentId, amount, dbClient);
-    await repos.walletRepository.recordTransaction(
-      { studentId, type: 'ORDER_PAYMENT', amount: -amount },
-      dbClient,
-    );
-    return { method: 'WALLET', charged: amount };
-  }
-
-  async refund({ studentId, amount, repos, dbClient }) {
-    await repos.walletRepository.topUp(studentId, amount, dbClient);
-    await repos.walletRepository.recordTransaction(
-      { studentId, type: 'ORDER_REFUND', amount },
-      dbClient,
-    );
-    return { method: 'WALLET', refunded: amount };
-  }
-}
-
-
-export class CreditPayment extends PaymentStrategy {
-  async pay({ studentId, amount, repos, dbClient }) {
-    const student = await repos.studentRepository.getById(studentId);
-    assertIsStudent(student, 'Student Credit');
-    return chargeCredit(repos.studentRepository, repos.creditRepository, studentId, amount, dbClient);
-  }
-
-  async refund({ studentId, amount, repos, dbClient }) {
-    return refundCredit(repos.creditRepository, studentId, amount, dbClient);
-  }
-}
-
-
-export class CardPayment extends PaymentStrategy {
-  async pay({ amount, cardToken, repos }) {
-    if (!repos.paymentGateway) {
-      throw new PaymentError('Card payment gateway is not configured.');
-    }
-    const result = await repos.paymentGateway.charge({ amount, cardToken });
-    if (!result || !result.success) {
-      throw new PaymentError('Card payment was declined.');
-    }
-    return { method: 'CARD', charged: amount, gatewayReference: result.gatewayReference };
-  }
-
-  async refund({ amount, gatewayReference, repos }) {
-    const result = await repos.paymentGateway.refund({ gatewayReference, amount });
-    if (!result || !result.success) {
-      throw new PaymentError('Card refund failed at the gateway.');
-    }
-    return { method: 'CARD', refunded: amount };
-  }
-}
-
-const STRATEGIES = {
-  WALLET: new WalletPayment(),
-  CREDIT: new CreditPayment(),
-  CARD: new CardPayment(),
+    await walletRepo.adjustWallet(user.id, -amount, client);
+    await walletRepo.addTransaction(user.id, 'WALLET_PURCHASE', -amount, `Order ${orderNumber}`, client);
+  },
+  async refund({ userId, amount, orderNumber, client }) {
+    if (amount <= 0) return;
+    await walletRepo.adjustWallet(userId, amount, client);
+    await walletRepo.addTransaction(userId, 'REFUND', amount, `Refund · ${orderNumber}`, client);
+  },
 };
 
-/** Picks the right strategy object for a payment method string. */
-export function getPaymentStrategy(method) {
-  const strategy = STRATEGIES[method];
-  if (!strategy) {
-    throw new PaymentError(`Unknown payment method: ${method}`);
-  }
+const CreditPayment = {
+  method: 'CREDIT',
+  requiresVerifiedStudent: true,
+  studentOnly: true,
+  async charge({ user, amount, orderNumber, client }) {
+    if (amount <= 0) return;
+    await walletRepo.markOverdue(client);
+    const account = await walletRepo.getCreditForUpdate(user.id, client);
+    const check = canBorrow(account, amount);
+    if (!check.ok) throw AppError.unprocessable(check.reason, { code: 'CREDIT_DECLINED', available: check.available });
+    await walletRepo.startCycleIfClear(user.id, client);
+    await walletRepo.adjustCredit(user.id, amount, client);
+    await walletRepo.addTransaction(user.id, 'CREDIT_PURCHASE', -amount, `Order ${orderNumber} · on credit`, client);
+  },
+  async refund({ userId, amount, orderNumber, client }) {
+    if (amount <= 0) return;
+    await walletRepo.adjustCredit(userId, -amount, client);
+    await walletRepo.addTransaction(userId, 'REFUND', amount, `Credit reversed · ${orderNumber}`, client);
+  },
+};
+
+const CardPayment = {
+  method: 'CARD',
+  requiresVerifiedStudent: false,
+  studentOnly: false,
+  async charge() {},
+  async refund() {},
+};
+
+const strategies = { WALLET: WalletPayment, CREDIT: CreditPayment, CARD: CardPayment };
+
+function getStrategy(method) {
+  const strategy = strategies[method];
+  if (!strategy) throw AppError.badRequest(`Unknown payment method: ${method}`);
   return strategy;
 }
 
-export class PaymentError extends Error {
-  constructor(message) {
-    super(message);
-    this.name = 'PaymentError';
-    this.statusCode = 402;
-  }
-}
+module.exports = { getStrategy, canBorrow, strategies };

@@ -5,6 +5,7 @@ const { round2 } = require('../utils/money');
 const walletRepo = require('../repositories/walletRepository');
 
 async function getSummary(userId) {
+  await walletRepo.markOverdue();
   const [wallet, credit, transactions] = await Promise.all([
     walletRepo.getWallet(userId), walletRepo.getCredit(userId), walletRepo.listTransactions(userId),
   ]);
@@ -36,9 +37,11 @@ async function repayCredit(userId, { amount, source }) {
       if (wallet.balance < amount) throw AppError.unprocessable('Not enough wallet balance for this repayment');
       await walletRepo.adjustWallet(userId, -amount, client);
     }
+    await walletRepo.markOverdue(client);
     const updated = await walletRepo.adjustCredit(userId, -amount, client);
-    if (updated.outstanding === 0 && account.status === 'OVERDUE') {
-      await client.query(`UPDATE credit_accounts SET status = 'ACTIVE' WHERE user_id = $1`, [userId]);
+    if (updated.outstanding === 0) {
+      // Settled: overdue accounts become active again (suspended ones stay suspended until the admin lifts it)
+      await client.query(`UPDATE credit_accounts SET status = 'ACTIVE' WHERE user_id = $1 AND status = 'OVERDUE'`, [userId]);
     }
     await walletRepo.addTransaction(userId, 'CREDIT_REPAYMENT', amount,
       `Credit repayment · ${source === 'WALLET' ? 'Wallet' : 'Card'}`, client);

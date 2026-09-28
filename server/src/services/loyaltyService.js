@@ -1,59 +1,25 @@
+// Loyalty rules (Task 1 §2.3.1, LP-01..LP-05). Owner: Liyabona (business logic).
+//  - Earn: 1 point for every `randsPerPoint` rand paid (default R10).
+//  - Redeem: each point is worth `pointValue` rand off (default R0.50).
+//  - Free meal: every `freeMealEvery` orders (default 10) earns one free meal,
+//    which takes the most expensive single item off the order, up to `freeMealCap`.
+const { round2 } = require('../utils/money');
 
-const DEFAULT_MAX_REDEMPTION_SHARE = 0.5;
-
-
-export function calculatePointsEarned(settings) {
-  return Math.max(0, Math.round(settings.pointsPerPurchase || 0));
-}
-export function getAvailablePoints(pointsLedger) {
-  return pointsLedger.reduce((total, entry) => total + entry.points, 0);
-}
-
-export function getAvailableFreeMeals(purchaseCount, freeMealsClaimed, settings) {
-  const threshold = settings.freeMealThreshold || 10;
-  const milestonesReached = Math.floor(purchaseCount / threshold);
-  return Math.max(0, milestonesReached - freeMealsClaimed);
-}
-
-export function applyRedemption(requestedPoints, availablePoints, orderTotal, settings) {
-  if (requestedPoints <= 0) {
-    return { pointsRedeemed: 0, discount: 0 };
+function calculateDiscounts({ lines, subtotal, usePoints = 0, useFreeMeal = false, availablePoints = 0, freeMeals = 0, settings }) {
+  let freeMealDiscount = 0;
+  if (useFreeMeal && freeMeals > 0 && lines.length) {
+    const priciest = Math.max(...lines.map(l => l.unitPrice));
+    freeMealDiscount = round2(Math.min(priciest, settings.freeMealCap));
   }
-  if (requestedPoints > availablePoints) {
-    throw new LoyaltyError('Not enough loyalty points available.');
-  }
-
-  const randPerPoint = settings.randPerPoint;
-  const maxShare = settings.maxRedemptionShare ?? DEFAULT_MAX_REDEMPTION_SHARE;
-  const maxDiscount = round2(orderTotal * maxShare);
-
-  let discount = round2(requestedPoints * randPerPoint);
-  let pointsRedeemed = requestedPoints;
-
-  if (discount > maxDiscount) {
-    discount = maxDiscount;
-    pointsRedeemed = Math.floor(maxDiscount / randPerPoint);
-  }
-
-  return { pointsRedeemed, discount };
+  const remaining = round2(subtotal - freeMealDiscount);
+  const maxPointsByValue = Math.floor(remaining / settings.pointValue + 1e-9);
+  const pointsUsed = Math.max(0, Math.min(Math.floor(usePoints), availablePoints, maxPointsByValue));
+  const pointsDiscount = round2(pointsUsed * settings.pointValue);
+  return { freeMealDiscount, pointsUsed, pointsDiscount, discount: round2(freeMealDiscount + pointsDiscount) };
 }
 
-export function getLoyaltySummary(pointsLedger, purchaseCount, freeMealsClaimed, settings) {
-  return {
-    pointsBalance: getAvailablePoints(pointsLedger),
-    purchaseCount,
-    freeMealsAvailable: getAvailableFreeMeals(purchaseCount, freeMealsClaimed, settings),
-  };
-}
+const pointsEarned = (amountPaid, settings) => Math.floor(amountPaid / settings.randsPerPoint + 1e-9);
 
-function round2(value) {
-  return Math.round((value + Number.EPSILON) * 100) / 100;
-}
+const earnsFreeMeal = (orderCount, settings) => orderCount > 0 && orderCount % settings.freeMealEvery === 0;
 
-export class LoyaltyError extends Error {
-  constructor(message) {
-    super(message);
-    this.name = 'LoyaltyError';
-    this.statusCode = 400;
-  }
-}
+module.exports = { calculateDiscounts, pointsEarned, earnsFreeMeal };

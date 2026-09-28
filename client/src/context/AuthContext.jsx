@@ -19,9 +19,10 @@ export function AuthProvider({ children }) {
   const login = async creds => handleAuth(await api.post('/auth/login', creds));
   const register = async data => handleAuth(await api.post('/auth/register', data));
   const refresh = async () => setUser(await api.get('/auth/me'));
+  const becomeStudent = async data => handleAuth(await api.post('/auth/me/student', data));
 
   const value = useMemo(() => ({
-    user, loading, login, register, logout, refresh, setUser,
+    user, loading, login, register, logout, refresh, setUser, becomeStudent,
     isStaff: ['ADMIN', 'VENDOR'].includes(user?.role),
     isAdmin: user?.role === 'ADMIN',
     isStudent: user?.role === 'STUDENT',
