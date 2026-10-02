@@ -27,6 +27,20 @@ module.exports = {
       `UPDATE credit_accounts SET outstanding_balance = outstanding_balance + $2
        WHERE user_id = $1 RETURNING outstanding_balance AS outstanding`, [userId, delta]).then(r => r.rows[0]),
 
+  // Past the due date with money owed -> OVERDUE (blocks new credit until settled)
+  markOverdue: client =>
+    db(client).query(`UPDATE credit_accounts SET status = 'OVERDUE'
+      WHERE status = 'ACTIVE' AND outstanding_balance > 0 AND due_date < CURRENT_DATE`),
+
+  // First credit purchase of a new cycle: due at the end of this month
+  startCycleIfClear: (userId, client) =>
+    client.query(`UPDATE credit_accounts
+      SET due_date = (date_trunc('month', CURRENT_DATE) + INTERVAL '1 month' - INTERVAL '1 day')::date
+      WHERE user_id = $1 AND outstanding_balance = 0`, [userId]),
+
+  setCreditStatus: (userId, status) =>
+    query(`UPDATE credit_accounts SET status = $2 WHERE user_id = $1 RETURNING status`, [userId, status]).then(r => r.rows[0]),
+
   setCreditLimit: (userId, limit) =>
     query(`UPDATE credit_accounts SET credit_limit = $2 WHERE user_id = $1 RETURNING credit_limit AS "limit"`,
       [userId, limit]).then(r => r.rows[0]),

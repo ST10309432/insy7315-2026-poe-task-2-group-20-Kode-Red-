@@ -1,6 +1,7 @@
 import { NavLink, Outlet, Link } from 'react-router-dom';
 import { Home, UtensilsCrossed, ShoppingCart, Wallet, User, LogIn } from 'lucide-react';
 import Brand from './Brand';
+import NotificationBell from './NotificationBell';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 
@@ -24,6 +25,7 @@ export default function StudentLayout() {
             {nav.map(n => <NavLink key={n.to} to={n.to} end={n.end}>{n.label}</NavLink>)}
           </nav>
           <span className="spacer" />
+          <NotificationBell />
           <Link to="/app/cart" className="icon-btn" style={{ position: 'relative' }} aria-label={`Cart, ${count} item${count === 1 ? '' : 's'}`}>
             <ShoppingCart size={20} aria-hidden="true" />
             {count > 0 && <span className="count-dot">{count}</span>}

@@ -3,6 +3,7 @@ import { Link, useLocation, useParams } from 'react-router-dom';
 import { Check, GraduationCap, X } from 'lucide-react';
 import { Loading, ErrorState, ButtonSpinner } from '../../components/States';
 import StatusBadge from '../../components/StatusBadge';
+import { StarPicker, Stars } from '../../components/Stars';
 import { useApi } from '../../hooks/useApi';
 import { api } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
@@ -16,6 +17,42 @@ const STEPS = [
   { key: 'COLLECTED', label: 'Collected' },
 ];
 const stepIndex = status => STEPS.findIndex(s => s.key === status || s.includes?.includes(status));
+
+function ReviewBox({ order, onSaved }) {
+  const [rating, setRating] = useState(0);
+  const [comment, setComment] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const toast = useToast();
+
+  if (order.review) {
+    return (
+      <div className="card small">
+        <strong>Your review</strong> <Stars value={order.review.rating} />
+        {order.review.comment && <p className="muted" style={{ margin: '6px 0 0' }}>“{order.review.comment}”</p>}
+      </div>
+    );
+  }
+  async function submit(e) {
+    e.preventDefault();
+    if (!rating) { setErr('Choose a star rating first'); return; }
+    setBusy(true); setErr('');
+    try { onSaved(await api.post(`/orders/${order.orderNumber}/review`, { rating, comment })); toast.success('Thanks for your review!'); }
+    catch (error) { setErr(error.fieldErrors.comment || error.message); } finally { setBusy(false); }
+  }
+  return (
+    <form className="card stack" onSubmit={submit}>
+      <h2 style={{ marginBottom: 0 }}>How was your order?</h2>
+      <StarPicker value={rating} onChange={v => { setRating(v); setErr(''); }} />
+      <label className="field">
+        <span className="label">Comment (optional)</span>
+        <textarea className="textarea" rows={3} maxLength={300} value={comment} onChange={e => setComment(e.target.value)} placeholder="Tell Thabang what you liked or what to improve" />
+      </label>
+      {err && <span className="field-error" role="alert">{err}</span>}
+      <button className="btn btn-primary" disabled={busy}>{busy && <ButtonSpinner />} Submit review</button>
+    </form>
+  );
+}
 
 export default function OrderStatus() {
   const { orderNumber } = useParams();
@@ -56,6 +93,8 @@ export default function OrderStatus() {
         <div className="card-flat card-yellow small row"><GraduationCap size={18} aria-hidden="true" /> {rand(order.total)} added to your student credit.</div>
       )}
       {state?.pointsEarned > 0 && <div className="notice notice-ok small">You earned {state.pointsEarned} loyalty points with this order.</div>}
+      {state?.freeMealEarned && <div className="notice notice-ok small">That was a milestone order: you've earned a free meal for next time!</div>}
+      {order.status === 'COLLECTED' && <ReviewBox order={order} onSaved={review => setData(o => ({ ...o, review }))} />}
 
       {!cancelled && (
         <div className="card">
@@ -81,7 +120,13 @@ export default function OrderStatus() {
             <strong>{rand(it.lineTotal)}</strong>
           </div>
         ))}
-        <div className="totals small"><div className="grand"><span>Total</span><span>{rand(order.total)}</span></div></div>
+        <div className="totals small">
+          {order.discount > 0 && <>
+            <div><span>Subtotal + service fee</span><span>{rand(order.subtotal + order.serviceFee)}</span></div>
+            <div><span>Rewards{order.freeMealUsed ? ' (free meal' : ''}{order.pointsRedeemed ? `${order.freeMealUsed ? ' + ' : ' ('}${order.pointsRedeemed} points` : ''})</span><span className="amt-pos">−{rand(order.discount)}</span></div>
+          </>}
+          <div className="grand"><span>Total paid</span><span>{rand(order.total)}</span></div>
+        </div>
       </div>
 
       {order.status === 'PLACED' && (

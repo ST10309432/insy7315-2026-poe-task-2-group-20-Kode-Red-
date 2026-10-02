@@ -101,7 +101,7 @@ CREATE TABLE wallet_transactions (
   user_id      INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
   type         VARCHAR(16) NOT NULL
                CHECK (type IN ('TOP_UP', 'WALLET_PURCHASE', 'CREDIT_PURCHASE', 'CREDIT_REPAYMENT', 'REFUND')),
-  amount       NUMERIC(10,2) NOT NULL CHECK (amount >= 0),
+  amount       NUMERIC(10,2) NOT NULL CHECK (amount <> 0), -- signed: + top-ups/refunds, − purchases
   description  VARCHAR(120) NOT NULL,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

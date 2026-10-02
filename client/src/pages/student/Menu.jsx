@@ -1,10 +1,11 @@
 import { useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Plus, Star, Clock, SearchX } from 'lucide-react';
+import { Plus, Clock, SearchX } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
-import ItemIcon from '../../components/ItemIcon';
+import { ItemThumb } from '../../components/ItemIcon';
 import { Skeletons, ErrorState, EmptyState } from '../../components/States';
 import { useApi } from '../../hooks/useApi';
+import { RatingChip } from '../../components/Stars';
 import { useCart } from '../../context/CartContext';
 import { useToast } from '../../context/ToastContext';
 import { rand, CATEGORIES } from '../../utils/format';
@@ -51,17 +52,17 @@ export default function Menu() {
         <ul className="list grid-2 grid" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
           {items.map(item => (
             <li key={item.id} className={`card menu-card ${item.available ? '' : 'soldout'}`}>
-              <ItemIcon category={item.category} size={56} />
+              <ItemThumb item={item} size={56} />
               <Link to={`/app/item/${item.id}`} className="info" style={{ color: 'inherit', textDecoration: 'none' }}>
                 <h3>{item.name}</h3>
                 <p className="xs muted" style={{ margin: '2px 0 4px' }}>{item.description}</p>
                 <div className="row" style={{ gap: 8 }}>
                   <span className="price">{rand(item.salePrice ?? item.price)}</span>
                   {item.salePrice && <span className="price-old">{rand(item.price)}</span>}
-                  <span className="rating"><Star size={11} aria-hidden="true" /> {item.rating}</span>
+                  <RatingChip rating={item.rating} count={item.ratingCount} />
                   <span className="xs muted row" style={{ gap: 3 }}><Clock size={12} aria-hidden="true" />{item.prepMinutes}m</span>
                 </div>
-                {!item.available && <span className="badge badge-grey" style={{ marginTop: 6 }}>Sold out today</span>}
+                {!item.available && <span className="badge badge-grey" style={{ marginTop: 6 }}>{item.soldOutToday ? 'Sold out today' : 'Unavailable'}</span>}
               </Link>
               <button className="add-btn" disabled={!item.available} aria-label={item.available ? `Add ${item.name} to cart` : `${item.name} is sold out`}
                 onClick={() => { add(item, 1, []); toast.success(`${item.name} added to cart`); }}>

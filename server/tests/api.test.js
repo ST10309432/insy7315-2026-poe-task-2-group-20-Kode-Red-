@@ -37,3 +37,16 @@ test('security headers are set', async () => {
   const res = await request(app).get('/api/nope');
   expect(res.headers['x-content-type-options']).toBe('nosniff');
 });
+
+test('API docs and OpenAPI spec are served', async () => {
+  const spec = await request(app).get('/api/openapi.json');
+  expect(spec.status).toBe(200);
+  expect(spec.body.openapi).toBe('3.1.0');
+  expect(Object.keys(spec.body.paths).length).toBeGreaterThan(25);
+  expect((await request(app).get('/api/docs/')).status).toBe(200);
+});
+
+test('photo upload requires admin login', async () => {
+  const res = await request(app).put('/api/menu/1/image').set('Content-Type', 'image/jpeg').send(Buffer.from([0xff, 0xd8, 0xff]));
+  expect(res.status).toBe(401);
+});

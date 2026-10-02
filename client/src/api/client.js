@@ -1,6 +1,7 @@
 // Single place for talking to the API: adds the login token, parses the
 // { data } / { error } format, and turns failures into readable messages.
-const BASE = (import.meta.env.VITE_API_URL || 'http://localhost:4000').replace(/\/$/, '') + '/api';
+export const API_ORIGIN = (import.meta.env.VITE_API_URL || 'http://localhost:4000').replace(/\/$/, '');
+const BASE = API_ORIGIN + '/api';
 const TOKEN_KEY = 'tp_token';
 
 export const tokenStore = {
@@ -50,10 +51,34 @@ async function request(method, path, body, { timeout = 60000 } = {}) {
   return json.data;
 }
 
+/** Download a file (e.g. a CSV export) from a protected endpoint and save it. */
+export async function download(path, fallbackName) {
+  const token = tokenStore.get();
+  const res = await fetch(BASE + path, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, json.error?.message || 'Download failed');
+  }
+  const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '')?.[1] || fallbackName;
+  const url = URL.createObjectURL(await res.blob());
+  const a = Object.assign(document.createElement('a'), { href: url, download: name });
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export const api = {
   get: (p, o) => request('GET', p, undefined, o),
   post: (p, b, o) => request('POST', p, b ?? {}, o),
   put: (p, b, o) => request('PUT', p, b, o),
   patch: (p, b, o) => request('PATCH', p, b, o),
   del: (p, o) => request('DELETE', p, undefined, o),
+  /** Upload raw bytes (e.g. a photo) with their own content type. */
+  upload: async (p, blob) => {
+    const token = tokenStore.get();
+    const res = await fetch(BASE + p, { method: 'PUT', body: blob,
+      headers: { 'Content-Type': blob.type, ...(token ? { Authorization: `Bearer ${token}` } : {}) } });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new ApiError(res.status, json.error?.message || 'Upload failed', json.error?.details);
+    return json.data;
+  },
 };
