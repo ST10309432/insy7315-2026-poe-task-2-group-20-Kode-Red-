@@ -1,0 +1,23 @@
+name: Mirror sync
+
+# Runs ONLY in the deploy mirror. Copies every branch and tag from EMGPPT
+# so the mirror stays 1:1 with the original repository.
+on:
+  schedule:
+    - cron: '0 */3 * * *'   # every 3 hours
+  workflow_dispatch:
+
+jobs:
+  sync:
+    if: github.repository == 'ST10309432/insy7315-2026-poe-task-2-group-20-Kode-Red-'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Copy EMGPPT into this mirror
+        env:
+          TOKEN: ${{ secrets.MIRROR_TOKEN }}
+        run: |
+          git clone --bare "https://x-access-token:${TOKEN}@github.com/EMGPPT/insy7315-2026-poe-task-2-group-20.git" source
+          cd source
+          git push --force --prune \
+            "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "refs/heads/:refs/heads/" "refs/tags/:refs/tags/"

@@ -8,19 +8,35 @@ on:
 jobs:
   backup:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
     steps:
-      - name: Install PostgreSQL client
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Check the database secret is set
+        id: check
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "NEON_DATABASE_URL is not set in this repository - skipping backup."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install PostgreSQL 18 client (newer than Neon, so pg_dump works)
+        if: steps.check.outputs.enabled == 'true'
+        run: |
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-client-18
 
       - name: Dump database
-        env:
-          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        if: steps.check.outputs.enabled == 'true'
         run: |
           STAMP=$(date +%Y-%m-%d)
-          pg_dump "$DATABASE_URL" --no-owner --no-privileges -f "backup-$STAMP.sql"
+          /usr/lib/postgresql/18/bin/pg_dump "$DATABASE_URL" --no-owner --no-privileges -f "backup-$STAMP.sql"
           gzip "backup-$STAMP.sql"
 
       - name: Upload backup artifact
+        if: steps.check.outputs.enabled == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: db-backup-${{ github.run_number }}

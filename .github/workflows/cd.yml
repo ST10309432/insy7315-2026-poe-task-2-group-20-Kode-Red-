@@ -6,30 +6,57 @@ on:
   workflow_dispatch:
 
 jobs:
+  check:
+    name: Check deploy secrets
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+    steps:
+      - id: check
+        env:
+          RENDER_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+          VERCEL_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
+        run: |
+          if [ -n "$RENDER_HOOK" ] && [ -n "$VERCEL_HOOK" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Deploy hooks are not set in this repository - skipping deployment."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
   deploy-api:
     name: Deploy API to Render
+    needs: check
+    if: needs.check.outputs.enabled == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Render deploy hook
-        run: curl -fsSL -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: curl -fsS -X POST "$HOOK" -o /dev/null
 
   deploy-client:
     name: Deploy client to Vercel
-    runs-on: ubuntu-latest
     needs: deploy-api
+    runs-on: ubuntu-latest
     steps:
       - name: Trigger Vercel deploy hook
-        run: curl -fsSL -X POST "${{ secrets.VERCEL_DEPLOY_HOOK }}"
+        env:
+          HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
+        run: curl -fsS -X POST "$HOOK" -o /dev/null
 
   smoke-test:
     name: Smoke test live URLs
-    runs-on: ubuntu-latest
     needs: deploy-client
+    runs-on: ubuntu-latest
     steps:
+      - name: Give Render time to build the new version
+        run: sleep 180
+
       - name: Wait for API to come up
         run: |
           for i in $(seq 1 20); do
-            if curl -fsSL https://thabang-phala-api.onrender.com/api/health; then
+            if curl -fsS https://thabang-phala-api.onrender.com/api/health; then
               echo "API is healthy"
               exit 0
             fi
@@ -41,6 +68,6 @@ jobs:
 
       - name: Check client responds
         run: |
-          code=$(curl -fsSL -o /dev/null -w "%{http_code}" https://thabang-phala.vercel.app/)
+          code=$(curl -sS -o /dev/null -w "%{http_code}" https://thabang-phala.vercel.app/)
           echo "Client HTTP $code"
           test "$code" = "200"
