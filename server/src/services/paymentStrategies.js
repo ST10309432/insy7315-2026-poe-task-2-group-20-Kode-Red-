@@ -2,7 +2,7 @@
 // so the checkout logic never needs to know the details. Owner: Liyabona (business logic).
 const AppError = require('../utils/AppError');
 const walletRepo = require('../repositories/walletRepository');
-const { canBorrow } = require('./creditService');
+const { canBorrow } = require ('./ creditService');
 
 
 
