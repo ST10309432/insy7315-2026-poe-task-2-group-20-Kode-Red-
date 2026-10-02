@@ -7,7 +7,7 @@ const orderRepo = require('../repositories/orderRepository');
 const userRepo = require('../repositories/userRepository');
 const settingsRepo = require('../repositories/settingsRepository');
 const { getStrategy } = require('./paymentStrategies');
-const {priceLines, calculateTotals, resolveCollectionTime} = required('./pricingService');
+const { priceLines, calculateTotals, resolveCollectionTime } = require('./pricingService');
 const loyalty = require('./loyaltyService');
 const notify = require('./notificationService');
 
