@@ -2,16 +2,9 @@
 // so the checkout logic never needs to know the details. Owner: Liyabona (business logic).
 const AppError = require('../utils/AppError');
 const walletRepo = require('../repositories/walletRepository');
-const { round2 } = require('../utils/money');
+const { canBorrow } = require('./creditService'); 
 
-/** Credit rule from Task 1 §6.2: outstanding + amount must not exceed the limit. */
-function canBorrow(account, amount) {
-  if (!account) return { ok: false, reason: 'You do not have a student credit account' };
-  if (account.status !== 'ACTIVE') return { ok: false, reason: `Your credit account is ${account.status.toLowerCase()}. Please settle it first.` };
-  const available = round2(account.credit_limit - account.outstanding_balance);
-  if (amount > available) return { ok: false, reason: `Only R${available.toFixed(2)} credit available`, available };
-  return { ok: true, available };
-}
+
 
 const WalletPayment = {
   method: 'WALLET',
