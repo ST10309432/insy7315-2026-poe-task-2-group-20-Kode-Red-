@@ -1,12 +1,13 @@
 // Order placement and lifecycle. Owner: Liyabona (business logic).
 const { withTransaction } = require('../config/db');
 const AppError = require('../utils/AppError');
-const { round2 } = require('../utils/money');
+
 const menuRepo = require('../repositories/menuRepository');
 const orderRepo = require('../repositories/orderRepository');
 const userRepo = require('../repositories/userRepository');
 const settingsRepo = require('../repositories/settingsRepository');
 const { getStrategy } = require('./paymentStrategies');
+const { priceLines, calculateTotals, resolveCollectionTime } = require('./pricingService');
 const loyalty = require('./loyaltyService');
 const notify = require('./notificationService');
 
@@ -22,33 +23,8 @@ const TRANSITIONS = {
 
 const canTransition = (from, to) => (TRANSITIONS[from] || []).includes(to);
 
-/** Price every line on the server from the database — never trust prices from the browser. */
-function priceLines(requested, menuItems) {
-  const byId = new Map(menuItems.map(m => [m.id, m]));
-  return requested.map(line => {
-    const item = byId.get(line.itemId);
-    if (!item) throw AppError.badRequest(`Menu item ${line.itemId} does not exist`);
-    if (!item.available) throw AppError.conflict(`${item.name} is sold out today`, { itemId: item.id });
-    const extras = (line.extraIds || []).map(id => {
-      const extra = item.extras.find(e => e.id === id);
-      if (!extra) throw AppError.badRequest(`Extra ${id} is not available for ${item.name}`);
-      return { id: extra.id, name: extra.name, price: extra.price };
-    });
-    const unitPrice = round2((item.salePrice ?? item.price) + extras.reduce((s, e) => s + e.price, 0));
-    return { itemId: item.id, name: item.name, quantity: line.quantity, extras, unitPrice,
-      lineTotal: round2(unitPrice * line.quantity), prepMinutes: item.prepMinutes };
-  });
-}
 
-function resolveCollectionTime(requested, lines) {
-  const prep = Math.max(...lines.map(l => l.prepMinutes));
-  const earliest = new Date(Date.now() + prep * 60 * 1000);
-  if (!requested || requested === 'ASAP') return earliest;
-  const when = new Date(requested);
-  if (when < new Date(Date.now() - 60 * 1000)) throw AppError.badRequest('Collection time is in the past');
-  if (when - Date.now() > 12 * 60 * 60 * 1000) throw AppError.badRequest('Collection time must be within 12 hours');
-  return when < earliest ? earliest : when;
-}
+
 
 async function placeOrder(userId, { items, paymentMethod, collectionTime, usePoints = 0, useFreeMeal = false }) {
   const user = await userRepo.findById(userId);
@@ -66,7 +42,7 @@ async function placeOrder(userId, { items, paymentMethod, collectionTime, usePoi
     const menuItems = await menuRepo.findManyByIds([...new Set(items.map(i => i.itemId))], client);
     const lines = priceLines(items, menuItems);
     const settings = await settingsRepo.getSettings(client);
-    const subtotal = round2(lines.reduce((s, l) => s + l.lineTotal, 0));
+    const { subtotal } = calculateTotals(lines, settings.serviceFee);
 
     // Loyalty: lock the user's points so they can't be spent twice
     const balance = await userRepo.getLoyaltyForUpdate(userId, client);
@@ -74,7 +50,7 @@ async function placeOrder(userId, { items, paymentMethod, collectionTime, usePoi
     if (usePoints > balance.loyalty_points) throw AppError.conflict(`You only have ${balance.loyalty_points} points`);
     const d = loyalty.calculateDiscounts({ lines, subtotal, usePoints, useFreeMeal,
       availablePoints: balance.loyalty_points, freeMeals: balance.free_meals, settings });
-    const total = round2(Math.max(0, subtotal + settings.serviceFee - d.discount));
+   const { total } = calculateTotals(lines, settings.serviceFee, d.discount)
 
     const order = await orderRepo.create({ userId, collectionTime: resolveCollectionTime(collectionTime, lines),
       subtotal, serviceFee: settings.serviceFee, discount: d.discount, total,
