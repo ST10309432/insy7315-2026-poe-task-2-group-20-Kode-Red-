@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Award, LogOut, ReceiptText, ChevronRight, Gift, GraduationCap } from 'lucide-react';
+import { Award, LogOut, ReceiptText, ChevronRight, Gift, GraduationCap, KeyRound } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import Field from '../../components/Field';
 import StatusBadge from '../../components/StatusBadge';
@@ -31,6 +31,35 @@ function BecomeStudent() {
       <Field label="Campus" value={form.campus} onChange={e => setForm(f => ({ ...f, campus: e.target.value }))} error={errors.campus} />
       {errors.form && !errors.studentNumber && <div className="notice notice-error small" role="alert">{errors.form}</div>}
       <button className="btn btn-primary" disabled={busy}>{busy && <ButtonSpinner />} Add student number</button>
+    </form>
+  );
+}
+
+function ChangePassword() {
+  const { changePassword } = useAuth();
+  const empty = { currentPassword: '', newPassword: '', confirm: '' };
+  const [form, setForm] = useState(empty);
+  const [errors, setErrors] = useState({});
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+  const set = key => e => setForm(f => ({ ...f, [key]: e.target.value }));
+  async function submit(e) {
+    e.preventDefault(); setErrors({});
+    if (form.newPassword !== form.confirm) { setErrors({ confirm: 'Passwords do not match' }); return; }
+    setBusy(true);
+    try {
+      await changePassword({ currentPassword: form.currentPassword, newPassword: form.newPassword });
+      setForm(empty);
+      toast.success('Password changed');
+    } catch (err) { setErrors(err.fieldErrors); toast.error(err.message); } finally { setBusy(false); }
+  }
+  return (
+    <form className="card stack" onSubmit={submit}>
+      <h2 className="row"><KeyRound size={20} aria-hidden="true" /> Change password</h2>
+      <Field label="Current password" type="password" autoComplete="current-password" value={form.currentPassword} onChange={set('currentPassword')} error={errors.currentPassword} />
+      <Field label="New password" type="password" autoComplete="new-password" hint="At least 8 characters, with a letter and a number" value={form.newPassword} onChange={set('newPassword')} error={errors.newPassword} />
+      <Field label="Confirm new password" type="password" autoComplete="new-password" value={form.confirm} onChange={set('confirm')} error={errors.confirm} />
+      <button className="btn" disabled={busy}>{busy && <ButtonSpinner />} Change password</button>
     </form>
   );
 }
@@ -88,6 +117,7 @@ export default function Account() {
             <Field label="Phone" type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} error={errors.phone} placeholder="+27 71 000 0000" />
             <button className="btn btn-primary" disabled={busy}>{busy && <ButtonSpinner />} Save changes</button>
           </form>
+          <ChangePassword />
         </div>
         <section className="card" aria-labelledby="history">
           <h2 id="history">Order history</h2>

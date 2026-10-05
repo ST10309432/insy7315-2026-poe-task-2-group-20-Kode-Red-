@@ -34,6 +34,16 @@ router.patch('/me', requireAuth, validate(s.updateProfile), async (req, res) => 
   res.json({ data: await userRepo.findById(req.user.id) });
 });
 
+// PATCH /api/auth/me/password  -> change password (current password required), returns a new token
+router.patch('/me/password', authLimiter, requireAuth, validate(s.changePassword), async (req, res) => {
+  res.json({ data: await authService.changePassword(req.user.id, req.body) });
+});
+
+// POST /api/auth/refresh  -> sliding session (NFR-21): swap a valid token for a fresh 30-minute one
+router.post('/refresh', requireAuth, async (req, res) => {
+  res.json({ data: await authService.refresh(req.user.id) });
+});
+
 // POST /api/auth/me/student  -> guest adds a student number (becomes a student, pending verification)
 router.post('/me/student', requireAuth, validate(s.becomeStudent), async (req, res) => {
   res.json({ data: await authService.becomeStudent(req.user.id, req.body) });

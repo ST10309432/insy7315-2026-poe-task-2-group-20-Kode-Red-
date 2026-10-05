@@ -5,6 +5,7 @@ const AppError = require('../utils/AppError');
 const userRepo = require('../repositories/userRepository');
 const settingsRepo = require('../repositories/settingsRepository');
 const { signToken } = require('../middleware/auth');
+const security = require('./securityService');
 
 async function register({ fullName, email, password, studentNumber, campus, phone }) {
   const existing = await userRepo.findByEmail(email);
@@ -27,10 +28,40 @@ async function register({ fullName, email, password, studentNumber, campus, phon
 
 async function login({ email, password }) {
   const user = await userRepo.findByEmail(email);
+  if (security.isLocked(user)) throw security.lockedError(user.locked_until);
+
   // Same message whether the email or password is wrong, so attackers can't discover accounts
   const ok = user && (await bcrypt.compare(password, user.password_hash));
-  if (!ok) throw AppError.unauthorized('Incorrect email or password');
+  if (!ok) {
+    if (user) {
+      const { failedLogins, lockedUntil } = security.nextFailure(user);
+      await userRepo.recordFailedLogin(user.user_id, failedLogins, lockedUntil);
+      if (lockedUntil) throw security.lockedError(lockedUntil);
+    }
+    throw AppError.unauthorized('Incorrect email or password');
+  }
+
+  if (user.failed_logins > 0 || user.locked_until) await userRepo.resetFailedLogins(user.user_id);
   return { token: signToken(user), user: await userRepo.findById(user.user_id) };
+}
+
+/** Change password: the current password must be correct. Returns a fresh token. */
+async function changePassword(userId, { currentPassword, newPassword }) {
+  const hash = await userRepo.getPasswordHash(userId);
+  if (!hash) throw AppError.unauthorized();
+  if (!(await bcrypt.compare(currentPassword, hash))) {
+    throw AppError.badRequest('Your current password is incorrect', [{ field: 'currentPassword', message: 'Incorrect password' }]);
+  }
+  await userRepo.updatePassword(userId, await bcrypt.hash(newPassword, 12));
+  const user = await userRepo.findById(userId);
+  return { token: signToken({ user_id: user.id, role: user.role }), user };
+}
+
+/** Sliding session (NFR-21): an active user swaps their token for a new 30-minute one. */
+async function refresh(userId) {
+  const user = await userRepo.findById(userId);
+  if (!user) throw AppError.unauthorized();
+  return { token: signToken({ user_id: user.id, role: user.role }), user };
 }
 
 /** A guest adds their student number: becomes an (unverified) student with a wallet and credit account. */
@@ -47,4 +78,4 @@ async function becomeStudent(userId, { studentNumber, campus }) {
   return { token: signToken(updated), user: await userRepo.findById(userId) };
 }
 
-module.exports = { register, login, becomeStudent };
+module.exports = { register, login, becomeStudent, changePassword, refresh };

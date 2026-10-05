@@ -50,6 +50,21 @@ module.exports = {
   staffIds: client =>
     db(client).query(`SELECT user_id FROM users WHERE role IN ('ADMIN','VENDOR')`).then(r => r.rows.map(x => x.user_id)),
 
+  // --- Account security (Molemo) ---
+  recordFailedLogin: (id, failedLogins, lockedUntil, client) =>
+    db(client).query(`UPDATE users SET failed_logins = $2, locked_until = $3 WHERE user_id = $1`, [id, failedLogins, lockedUntil]),
+
+  resetFailedLogins: (id, client) =>
+    db(client).query(`UPDATE users SET failed_logins = 0, locked_until = NULL WHERE user_id = $1`, [id]),
+
+  getPasswordHash: (id, client) =>
+    db(client).query(`SELECT password_hash FROM users WHERE user_id = $1`, [id]).then(r => r.rows[0]?.password_hash),
+
+  updatePassword: (id, passwordHash, client) =>
+    db(client).query(
+      `UPDATE users SET password_hash = $2, password_changed_at = NOW(), failed_logins = 0, locked_until = NULL WHERE user_id = $1`,
+      [id, passwordHash]),
+
   exportCustomers: () =>
     query(`SELECT u.full_name, u.email, u.role, u.student_number, u.campus, u.phone, u.verified, u.loyalty_points, u.free_meals,
              w.balance AS wallet_balance, c.credit_limit, c.outstanding_balance, c.status AS credit_status, c.due_date,
