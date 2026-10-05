@@ -15,6 +15,12 @@ const register = z.object({
   phone: z.string().trim().regex(/^\+?[0-9 ]{9,15}$/, 'Enter a valid phone number').optional(),
 });
 
+// Change password (Molemo): same rules as registration, and must be different
+const changePassword = z.object({
+  currentPassword: z.string().min(1, 'Enter your current password'),
+  newPassword: register.shape.password,
+}).refine(d => d.currentPassword !== d.newPassword, { message: 'Choose a password you have not used here', path: ['newPassword'] });
+
 const login = z.object({
   email: z.email('Enter a valid email address').trim().toLowerCase(),
   password: z.string().min(1, 'Enter your password'),
@@ -101,6 +107,6 @@ const truck = z.object({
 });
 const reportQuery = z.object({ days: z.coerce.number().int().min(1).max(90).default(7) });
 
-module.exports = { register, login, updateProfile, menuItem, menuQuery, availability, idParam, placeOrder,
+module.exports = { register, login, changePassword, updateProfile, menuItem, menuQuery, availability, idParam, placeOrder,
   orderStatus, orderNumberParam, queueQuery, topUp, repay, verify, creditLimit, settings, truck, reportQuery,
   review, becomeStudent, creditStatus, notificationParam, reviewsQuery };

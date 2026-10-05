@@ -41,11 +41,13 @@ module.exports = {
       responses: { 201: ok('Created — returns token and user'), 400: std[400], 409: err('Email already registered') } }) },
     '/api/auth/login': { post: op('Auth', 'Log in and get a JWT', {
       requestBody: body(s.login, { email: 'admin@thabangphala.co.za', password: 'Password123!' }),
-      responses: { 401: err('Incorrect email or password'), 429: err('Too many attempts') } }) },
+      responses: { 401: err('Incorrect email or password'), 423: err('Account locked after 5 failed attempts (15 minutes)'), 429: err('Too many attempts') } }) },
     '/api/auth/me': {
       get: op('Auth', 'Current user (points, free meals, order count)', { security: auth, responses: std }),
       patch: op('Auth', 'Update own details (FR-11)', { security: auth, requestBody: body(s.updateProfile), responses: std }),
     },
+    '/api/auth/me/password': { patch: op('Auth', 'Change password (returns a new token)', { security: auth, requestBody: body(s.changePassword, { currentPassword: 'Password123!', newPassword: 'NewPassword456' }), responses: std }) },
+    '/api/auth/refresh': { post: op('Auth', 'Refresh the session token (sliding 30-minute session, NFR-21)', { security: auth, responses: std }) },
     '/api/auth/me/student': { post: op('Auth', 'Guest adds a student number (returns a new token)', { security: auth, requestBody: body(s.becomeStudent), responses: { ...std, 409: err('Not a guest account') } }) },
 
     '/api/menu': {
