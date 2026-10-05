@@ -293,7 +293,7 @@ The database runs on Neon PostgreSQL.
 
 ## Presentation
 
-- youtube link will be pasted here
+(https://youtu.be/1b--OSnoI9A )  
 
 ## Definition of done
 
