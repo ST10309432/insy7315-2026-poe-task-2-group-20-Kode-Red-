@@ -22,10 +22,105 @@ CI runs on every pull request in this repository. Deployments (CD), weekly backu
 | REST API | `server/` | Node.js, Express 5, zod, JWT, bcrypt |
 | Database | `server/src/db/` | PostgreSQL |
 | Hosting | `render.yaml`, `client/vercel.json` | Vercel · Render · Neon (all free plans) |
-
 ## Entity Relationship Diagram
 
-The database uses a single `users` table with a `role` column (`STUDENT`, `GUEST`, `VENDOR`, `ADMIN`), so students, vendors and admins all share one identity table.
+The database uses a single `users` table with a `role` column (STUDENT, GUEST, VENDOR, ADMIN), so students, vendors and admins all share one identity table. Money is stored as `NUMERIC(10,2)` throughout.
+
+```mermaid
+erDiagram
+    USERS ||--o| WALLETS : "has one"
+    USERS ||--o| CREDIT_ACCOUNTS : "has one"
+    USERS ||--o{ ORDERS : "places"
+    USERS ||--o{ WALLET_TRANSACTIONS : "audit trail"
+    USERS ||--o{ NOTIFICATIONS : "receives"
+    USERS ||--o{ REVIEWS : "writes"
+    ORDERS ||--|{ ORDER_ITEMS : "contains"
+    ORDERS ||--o| PAYMENTS : "settled by"
+    ORDER_ITEMS }o--|| MENU_ITEMS : "references"
+    MENU_ITEMS ||--o{ MENU_EXTRAS : "offers"
+    MENU_ITEMS ||--o{ REVIEWS : "reviewed in"
+    MENU_ITEMS ||--o| DAILY_STOCK : "has"
+
+    USERS {
+        int user_id PK
+        varchar full_name
+        varchar email UK
+        varchar password_hash
+        varchar role
+        varchar student_number UK
+        boolean verified
+        int loyalty_points
+    }
+    WALLETS {
+        int wallet_id PK
+        int user_id FK
+        numeric balance
+        timestamptz last_top_up
+    }
+    CREDIT_ACCOUNTS {
+        int credit_id PK
+        int user_id FK
+        numeric credit_limit
+        numeric outstanding_balance
+        date due_date
+        varchar status
+    }
+    MENU_ITEMS {
+        int item_id PK
+        varchar name UK
+        varchar category
+        numeric price
+        numeric sale_price
+        boolean available
+    }
+    MENU_EXTRAS {
+        int extra_id PK
+        int item_id FK
+        varchar name
+        numeric price
+    }
+    ORDERS {
+        int order_id PK
+        varchar order_number UK
+        int user_id FK
+        timestamptz collection_time
+        varchar status
+        numeric total
+        timestamptz updated_at
+    }
+    ORDER_ITEMS {
+        int order_item_id PK
+        int order_id FK
+        int item_id FK
+        int quantity
+        numeric line_total
+        jsonb extras
+    }
+    PAYMENTS {
+        int payment_id PK
+        int order_id FK
+        varchar method
+        numeric amount
+    }
+    WALLET_TRANSACTIONS {
+        int tx_id PK
+        int user_id FK
+        varchar type
+        numeric amount
+    }
+    TRUCK_STATUS {
+        int id PK
+        boolean is_open
+        varchar location_name
+    }
+    SETTINGS {
+        int id PK
+        numeric default_credit_limit
+        numeric service_fee
+        int rands_per_point
+        timestamptz updated_at
+    }
+```
 
 Later migrations add loyalty points, notifications, order reviews and menu-item photos. Apply them with `npm run db:migrate` inside `server/`.
 
