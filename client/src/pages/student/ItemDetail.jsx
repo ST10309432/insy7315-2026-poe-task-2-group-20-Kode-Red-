@@ -30,7 +30,7 @@ export default function ItemDetail() {
     <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', alignItems: 'start' }}>
       <div>
         <PageHeader title="" back />
-        <div className={`card tone-${item.category}`} style={{ display: 'grid', placeItems: 'center', minHeight: 220, padding: item.imageUrl ? 0 : 16, overflow: 'hidden', aspectRatio: item.imageUrl ? '4 / 3' : undefined }}>
+        <div className={`card tone-${item.category}`} style={{ position: 'relative', display: 'grid', placeItems: 'center', minHeight: 220, padding: item.imageUrl ? 0 : 16, overflow: 'hidden', aspectRatio: item.imageUrl ? '4 / 3' : undefined }}>
           <ItemHero item={item} iconSize={120} />
         </div>
       </div>
