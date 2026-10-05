@@ -18,7 +18,7 @@ export default function Login({ mode: initialMode = 'login' }) {
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState('');
   const [busy, setBusy] = useState(false);
-  const { login, register } = useAuth();
+  const { login, register, sessionNotice } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
   const from = useLocation().state?.from;
@@ -55,6 +55,7 @@ export default function Login({ mode: initialMode = 'login' }) {
           </div>
           <form className="stack" onSubmit={submit} noValidate>
             <h1 style={{ fontSize: '1.5rem' }}>{mode === 'login' ? 'Welcome back' : 'Create your account'}</h1>
+            {sessionNotice && !formError && <div className="notice small" role="status">{sessionNotice}</div>}
             {formError && <div className="notice notice-error" role="alert">{formError}</div>}
             {mode === 'register' && (
               <Field label="Full name" autoComplete="name" value={form.fullName} onChange={set('fullName')} error={errors.fullName} required />
