@@ -24,7 +24,7 @@ CI runs on every pull request in this repository. Deployments (CD), weekly backu
 | Hosting | `render.yaml`, `client/vercel.json` | Vercel · Render · Neon (all free plans) |
 ## Entity Relationship Diagram
 
-The database uses a single `users` table with a `role` column (STUDENT, GUEST, VENDOR, ADMIN), so students, vendors and admins all share one identity table. Money is stored as `NUMERIC(10,2)` throughout.
+The database uses a single `users` table with a `role` column (STUDENT, GUEST, VENDOR, ADMIN), so students, vendors and admins all share one identity table.
 
 ```mermaid
 erDiagram
@@ -32,14 +32,10 @@ erDiagram
     USERS ||--o| CREDIT_ACCOUNTS : "has one"
     USERS ||--o{ ORDERS : "places"
     USERS ||--o{ WALLET_TRANSACTIONS : "audit trail"
-    USERS ||--o{ NOTIFICATIONS : "receives"
-    USERS ||--o{ REVIEWS : "writes"
     ORDERS ||--|{ ORDER_ITEMS : "contains"
     ORDERS ||--o| PAYMENTS : "settled by"
     ORDER_ITEMS }o--|| MENU_ITEMS : "references"
     MENU_ITEMS ||--o{ MENU_EXTRAS : "offers"
-    MENU_ITEMS ||--o{ REVIEWS : "reviewed in"
-    MENU_ITEMS ||--o| DAILY_STOCK : "has"
 
     USERS {
         int user_id PK
@@ -55,14 +51,12 @@ erDiagram
         int wallet_id PK
         int user_id FK
         numeric balance
-        timestamptz last_top_up
     }
     CREDIT_ACCOUNTS {
         int credit_id PK
         int user_id FK
         numeric credit_limit
         numeric outstanding_balance
-        date due_date
         varchar status
     }
     MENU_ITEMS {
@@ -70,7 +64,6 @@ erDiagram
         varchar name UK
         varchar category
         numeric price
-        numeric sale_price
         boolean available
     }
     MENU_EXTRAS {
@@ -86,7 +79,6 @@ erDiagram
         timestamptz collection_time
         varchar status
         numeric total
-        timestamptz updated_at
     }
     ORDER_ITEMS {
         int order_item_id PK
@@ -117,8 +109,6 @@ erDiagram
         int id PK
         numeric default_credit_limit
         numeric service_fee
-        int rands_per_point
-        timestamptz updated_at
     }
 ```
 
